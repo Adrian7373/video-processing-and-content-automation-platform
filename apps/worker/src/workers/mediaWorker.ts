@@ -27,8 +27,8 @@ export const mediaWorker = new Worker<VideoProcessingJobData, unknown>(
     queueNames.media,
     processMediaJob,
     {
-    connection: redis,
-    concurrency: 2,
+        connection: redis,
+        concurrency: 2,
     },
 );
 
@@ -37,8 +37,8 @@ export const legacyVideoWorker = new Worker<VideoProcessingJobData, unknown>(
     queueNames.legacyVideo,
     processMediaJob,
     {
-    connection: redis,
-    concurrency: 2,
+        connection: redis,
+        concurrency: 2,
     },
 );
 
