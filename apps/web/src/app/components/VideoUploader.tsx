@@ -5,13 +5,14 @@ import { getPresignedUploadUrl } from "../../../actions/upload";
 import type { AspectRatio, CaptionStyle } from "../../lib/queues";
 
 type UploadStatus = "idle" | "requesting" | "uploading" | "processing" | "error";
+type ProcessingMode = "CLIP" | "CAPTION_ONLY";
 
 const MOCK_USER_ID = "00000000-0000-4000-8000-000000000001";
 
 const statusLabels: Record<UploadStatus, string> = {
     idle: "Ready to upload",
     requesting: "Preparing secure upload...",
-    uploading: "Uploading video...", // Fallback, overridden by fun phrases
+    uploading: "Uploading video...",
     processing: "Your video is now being processed. Check the videos library for future updates.",
     error: "Upload failed. Please try again.",
 };
@@ -42,6 +43,10 @@ export default function VideoUploader() {
     const [file, setFile] = useState<File | null>(null);
     const [status, setStatus] = useState<UploadStatus>("idle");
     const [progress, setProgress] = useState(0);
+
+    // New State for toggling modes
+    const [mode, setMode] = useState<ProcessingMode>("CLIP");
+
     const [userPrompt, setUserPrompt] = useState("");
     const [aspectRatio, setAspectRatio] = useState<AspectRatio>("VERTICAL_9_16");
     const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("KARAOKE");
@@ -49,7 +54,6 @@ export default function VideoUploader() {
 
     const isBusy = status === "requesting" || status === "uploading";
 
-    // Cycle through fun phrases every 3.5 seconds while uploading
     useEffect(() => {
         if (status !== "uploading") return;
         const interval = setInterval(() => {
@@ -77,6 +81,7 @@ export default function VideoUploader() {
             setStatus("requesting");
             setProgress(0);
 
+            // Pass `processingMode: mode` to the backend so it knows whether to bypass Gemini
             const initializationResponse = await fetch("/api/videos/init", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -85,7 +90,8 @@ export default function VideoUploader() {
                     contentType: file.type,
                     fileSize: file.size,
                     userId: MOCK_USER_ID,
-                    userPrompt,
+                    userPrompt: mode === "CLIP" ? userPrompt : "",
+                    processingMode: mode,
                     aspectRatio,
                     captionStyle,
                 }),
@@ -105,7 +111,6 @@ export default function VideoUploader() {
                 fileSize: file.size,
             }, s3Key);
 
-            // Pick a random starting phrase before switching status
             setLoadingMessage(funPhrases[Math.floor(Math.random() * funPhrases.length)]);
             setStatus("uploading");
 
@@ -144,7 +149,8 @@ export default function VideoUploader() {
                     s3Key,
                     videoId,
                     userId: MOCK_USER_ID,
-                    userPrompt,
+                    userPrompt: mode === "CLIP" ? userPrompt : "",
+                    processingMode: mode,
                     aspectRatio,
                     captionStyle,
                 }),
@@ -171,11 +177,37 @@ export default function VideoUploader() {
                     Video repurposer
                 </p>
                 <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">
-                    Upload a lecture
+                    Upload a video
                 </h1>
                 <p className="mt-2 text-sm leading-6 text-neutral-400">
                     Your video is uploaded directly to secure storage before processing.
                 </p>
+            </div>
+
+            {/* Mode Selection Tabs */}
+            <div className="mb-6 flex space-x-1 rounded-lg bg-neutral-900 p-1">
+                <button
+                    type="button"
+                    onClick={() => setMode("CLIP")}
+                    disabled={isBusy}
+                    className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${mode === "CLIP"
+                            ? "bg-[#27272A] text-white shadow-sm"
+                            : "text-neutral-400 hover:text-neutral-200"
+                        } disabled:opacity-50`}
+                >
+                    Extract Viral Clips
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setMode("CAPTION_ONLY")}
+                    disabled={isBusy}
+                    className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${mode === "CAPTION_ONLY"
+                            ? "bg-[#27272A] text-white shadow-sm"
+                            : "text-neutral-400 hover:text-neutral-200"
+                        } disabled:opacity-50`}
+                >
+                    Caption Full Video
+                </button>
             </div>
 
             <form className="space-y-5" onSubmit={handleSubmit}>
@@ -192,20 +224,23 @@ export default function VideoUploader() {
                     />
                 </label>
 
-                <label className="block">
-                    <span className="mb-2 block text-sm font-medium text-neutral-300">
-                        AI clipping prompt
-                    </span>
-                    <textarea
-                        value={userPrompt}
-                        onChange={(event) => setUserPrompt(event.target.value)}
-                        maxLength={1000}
-                        rows={3}
-                        placeholder="Find the funniest moments or key technical takeaways"
-                        disabled={isBusy}
-                        className="block w-full resize-y rounded-lg border border-neutral-700 bg-[#171717] px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
-                    />
-                </label>
+                {/* Conditionally Render the AI Prompt */}
+                {mode === "CLIP" && (
+                    <label className="block animate-in fade-in slide-in-from-top-2 duration-300">
+                        <span className="mb-2 block text-sm font-medium text-neutral-300">
+                            AI clipping prompt
+                        </span>
+                        <textarea
+                            value={userPrompt}
+                            onChange={(event) => setUserPrompt(event.target.value)}
+                            maxLength={1000}
+                            rows={3}
+                            placeholder="Find the funniest moments or key technical takeaways..."
+                            disabled={isBusy}
+                            className="block w-full resize-y rounded-lg border border-neutral-700 bg-[#171717] px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        />
+                    </label>
+                )}
 
                 <div className="grid gap-4 sm:grid-cols-2">
                     <label className="block">
@@ -237,7 +272,7 @@ export default function VideoUploader() {
                             <option value="KARAOKE">Karaoke</option>
                             <option value="HIGHLIGHT">Highlight</option>
                             <option value="MINIMAL">Minimal</option>
-                            <option value="NONE">None</option>
+                            {mode === "CLIP" && <option value="NONE">None</option>}
                         </select>
                     </label>
                 </div>
