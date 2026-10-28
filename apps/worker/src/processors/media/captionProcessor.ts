@@ -118,10 +118,16 @@ export function buildAssSubtitleContent(
 
     // ASS colors use &HAABBGGRR (BGR order!):
     // Yellow: &H0000FFFF | White: &H00FFFFFF | Black: &H00000000
+    // Inside captionProcessor.ts -> buildAssSubtitleContent()
+
     const isMinimal = captionStyle === "MINIMAL";
+
+    // For this style, we'll keep the text white and use yellow for HIGHLIGHT/KARAOKE active words
     const primaryColor = captionStyle === "KARAOKE" ? "&H0000FFFF" : "&H00FFFFFF";
     const secondaryColor = "&H00FFFFFF";
-    const outlineWidth = isMinimal ? 3 : 5;
+
+    // Increase the outline for that thick, blocky look
+    const outlineWidth = isMinimal ? 3 : 10; // Bumped up to 10 for a heavy border
 
     const header = `[Script Info]
 ScriptType: v4.00+
@@ -132,7 +138,7 @@ WrapStyle: 2
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,${resolution.fontSize},${primaryColor},${secondaryColor},&H00000000,&H80000000,${isMinimal ? 0 : -1},0,0,0,100,100,0,0,1,${outlineWidth},2,2,60,60,${resolution.marginV},1
+Style: Default,Arial,${resolution.fontSize},${primaryColor},${secondaryColor},&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,${outlineWidth},0,2,60,60,${resolution.marginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
