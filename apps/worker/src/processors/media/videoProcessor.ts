@@ -5,8 +5,8 @@ import {
 } from "@aws-sdk/client-s3";
 import type { Job } from "bullmq";
 import ffmpeg from "fluent-ffmpeg";
-import { mkdir, rm, readFile } from "node:fs/promises";
-import { createWriteStream, createReadStream, existsSync } from "node:fs";
+import { mkdir, rm, readFile, stat } from "node:fs/promises";
+import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import { platform } from "node:os";
 import { execFile, execFileSync, type ExecException } from "node:child_process";
@@ -22,6 +22,9 @@ import { google } from "@ai-sdk/google";
 import { prisma } from "../../../../../packages/database/index.js";
 import { env } from "../../config/env.js";
 import { jobNames } from "../../constants/queues.js";
+
+// Import only the caption processor
+import { generateAndBurnCaptions, wordTimestampSchema } from "./captionProcessor.js";
 
 const s3Bucket = env.S3_BUCKET_NAME;
 const LOCAL_TMP_DIR = join(process.cwd(), ".tmp");
@@ -40,6 +43,7 @@ const videoProcessingJobSchema = z.object({
     s3Key: z.string(),
     userId: z.string().min(1),
     userPrompt: z.string().trim().max(1000).optional().nullable(),
+    processingMode: z.enum(["CLIP", "CAPTION_ONLY"]).default("CLIP"),
     aspectRatio: z
         .enum(["VERTICAL_9_16", "LANDSCAPE_16_9", "SQUARE_1_1"])
         .default("VERTICAL_9_16"),
@@ -54,14 +58,15 @@ const transcriptSegmentSchema = z
         end: z.number(),
         text: z.string(),
     })
-    .strict();
+    .passthrough();
 
 const transcriptResponseSchema = z
     .object({
         segments: z.array(transcriptSegmentSchema),
-        language: z.string(),
+        language: z.string().optional(),
+        words: z.array(wordTimestampSchema).optional(),
     })
-    .strict();
+    .passthrough();
 
 const structuredDataSchema = z
     .object({
@@ -73,14 +78,14 @@ const structuredDataSchema = z
                         thumbnail_text: z.string(),
                         start_time: z.number(),
                         end_time: z.number(),
-                        key_points: z.array(z.string()).min(3).max(5),
+                        key_points: z.array(z.string()).min(1).max(5),
                         social_caption: z.string(),
                     })
-                    .strict(),
+                    .passthrough(),
             )
             .min(1),
     })
-    .strict();
+    .passthrough();
 
 type StructuredData = z.infer<typeof structuredDataSchema>;
 
@@ -174,20 +179,56 @@ async function downloadS3File(
             throw new Error(`S3 object "${s3Key}" did not contain a response body.`);
         }
 
-        console.log(
-            `S3 headers received${response.ContentLength === undefined ? "." : ` (${response.ContentLength} bytes).`}`,
-        );
         const bodyStream = Readable.fromWeb(
             response.Body.transformToWebStream() as unknown as NodeReadableStream<Uint8Array>,
         );
         await pipeline(bodyStream, createWriteStream(downloadPath));
-        console.log(`Saved S3 object to "${downloadPath}".`);
     } catch (error) {
         await rm(downloadPath, { force: true });
         throw error;
     } finally {
         clearTimeout(timeout);
     }
+}
+
+function getVideoDurationSeconds(
+    videoPath: string,
+    fallbackSeconds: number = 60,
+): Promise<number> {
+    if (!ffprobeExecutablePath) {
+        return Promise.resolve(fallbackSeconds);
+    }
+
+    const probeExecutablePath = ffprobeExecutablePath;
+
+    return new Promise((resolve) => {
+        execFile(
+            probeExecutablePath,
+            [
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                videoPath,
+            ],
+            { windowsHide: true },
+            (error: ExecException | null, stdout: string) => {
+                if (error) {
+                    resolve(fallbackSeconds);
+                    return;
+                }
+
+                const parsed = Number.parseFloat(stdout.trim());
+                resolve(
+                    Number.isFinite(parsed) && parsed > 0
+                        ? parsed
+                        : fallbackSeconds,
+                );
+            },
+        );
+    });
 }
 
 function extractAudio(videoPath: string, audioPath: string): Promise<void> {
@@ -262,9 +303,6 @@ function extractAudio(videoPath: string, audioPath: string): Promise<void> {
                     audioPath,
                 ];
 
-                console.log(
-                    `FFmpeg audio command: ${executablePath} ${args.join(" ")}`,
-                );
                 execFile(
                     executablePath,
                     args,
@@ -282,7 +320,6 @@ function extractAudio(videoPath: string, audioPath: string): Promise<void> {
                             );
                             return;
                         }
-
                         resolve();
                     },
                 );
@@ -367,17 +404,24 @@ function sliceVideo(
     });
 }
 
-async function uploadS3File(localPath: string, s3Key: string): Promise<void> {
+async function uploadS3File(
+    localPath: string,
+    s3Key: string,
+    contentType: string = "video/mp4",
+): Promise<void> {
     if (!s3Bucket) {
         throw new Error("S3_BUCKET_NAME must be configured.");
     }
+
+    const fileStats = await stat(localPath);
 
     await s3.send(
         new PutObjectCommand({
             Bucket: s3Bucket,
             Key: s3Key,
             Body: createReadStream(localPath),
-            ContentType: "video/mp4",
+            ContentLength: fileStats.size,
+            ContentType: contentType,
         }),
     );
 }
@@ -387,29 +431,31 @@ export type VideoProcessingJobData = z.infer<typeof videoProcessingJobSchema>;
 export async function processVideo(
     job: Job<VideoProcessingJobData>,
 ): Promise<{ status: "completed" }> {
-        if (job.name !== jobNames.processVideo) {
-            throw new Error(
-                `Unsupported job "${job.name}" received by the media worker.`,
-            );
-        }
+    if (job.name !== jobNames.processVideo) {
+        throw new Error(
+            `Unsupported job "${job.name}" received by the media worker.`,
+        );
+    }
 
-        const jobData = videoProcessingJobSchema.parse(job.data);
-        if (!job.id) {
-            throw new Error("Video-processing jobs must have a job ID.");
-        }
+    const jobData = videoProcessingJobSchema.parse(job.data);
+    if (!job.id) {
+        throw new Error("Video-processing jobs must have a job ID.");
+    }
 
-        await mkdir(LOCAL_TMP_DIR, { recursive: true });
-        const videoPath = join(LOCAL_TMP_DIR, `${job.id}.mp4`).replace(/\\/g, "/");
-        const audioPath = join(LOCAL_TMP_DIR, `${job.id}.mp3`).replace(/\\/g, "/");
-        const generatedClips: string[] = [];
+    await mkdir(LOCAL_TMP_DIR, { recursive: true });
+    const videoPath = join(LOCAL_TMP_DIR, `${job.id}.mp4`).replace(/\\/g, "/");
+    const audioPath = join(LOCAL_TMP_DIR, `${job.id}.mp3`).replace(/\\/g, "/");
 
-        try {
+    const temporaryFilesToCleanup: string[] = [];
+
+    try {
         const parentVideo = await prisma.video.findUnique({
             where: { id: jobData.videoId },
             select: {
                 userPrompt: true,
                 aspectRatio: true,
                 captionStyle: true,
+                title: true,
             },
         });
         if (!parentVideo) {
@@ -417,9 +463,18 @@ export async function processVideo(
         }
 
         const rawJobData = job.data as Record<string, unknown>;
-        const effectiveJobData: VideoProcessingJobData = {
+        const rawPrompt = jobData.userPrompt ?? parentVideo.userPrompt;
+        const isCaptionOnly =
+            rawJobData.processingMode === "CAPTION_ONLY" ||
+            jobData.processingMode === "CAPTION_ONLY" ||
+            rawPrompt?.trim() === "[CAPTION_ONLY]";
+
+        const effectiveJobData: VideoProcessingJobData & {
+            processingMode: "CLIP" | "CAPTION_ONLY";
+        } = {
             ...jobData,
-            userPrompt: jobData.userPrompt ?? parentVideo.userPrompt,
+            userPrompt: isCaptionOnly ? "" : rawPrompt,
+            processingMode: isCaptionOnly ? "CAPTION_ONLY" : "CLIP",
             aspectRatio:
                 typeof rawJobData.aspectRatio === "string"
                     ? jobData.aspectRatio
@@ -430,50 +485,40 @@ export async function processVideo(
                     : parentVideo.captionStyle,
         };
 
-        console.log("Received video-processing job from producer endpoint", {
-            jobId: job.id,
-            jobName: job.name,
-            videoId: jobData.videoId,
-            s3Key: jobData.s3Key,
-            userId: jobData.userId,
-            userPrompt: effectiveJobData.userPrompt,
-            aspectRatio: effectiveJobData.aspectRatio,
-            captionStyle: effectiveJobData.captionStyle,
+        console.log(
+            `Starting job ${job.id} | Mode: ${effectiveJobData.processingMode}`,
+        );
+
+        await downloadS3File(jobData.s3Key, videoPath);
+        await extractAudio(videoPath, audioPath);
+
+        console.log(`Sending audio to Flask for transcription...`);
+        const audioBuffer = await readFile(audioPath);
+        const formData = new FormData();
+        formData.append("file", audioBuffer, {
+            filename: "audio.mp3",
+            contentType: "audio/mpeg",
         });
 
-            await downloadS3File(jobData.s3Key, videoPath);
-            await extractAudio(videoPath, audioPath);
-
-            console.log(`Sending audio to Flask for transcription...`);
-
-            // 1. Read the MP3 directly into memory to bypass stream deadlocks
-            const audioBuffer = await readFile(audioPath);
-
-            // 2. Attach the buffer to FormData with explicit file metadata
-            const formData = new FormData();
-            formData.append("file", audioBuffer, {
-                filename: "audio.mp3",
-                contentType: "audio/mpeg",
+        const contentLength = await new Promise<number>((resolve, reject) => {
+            formData.getLength((error, length) => {
+                if (error) {
+                    reject(
+                        new Error(
+                            `Unable to determine upload size: ${error.message}`,
+                        ),
+                    );
+                    return;
+                }
+                resolve(length);
             });
+        });
 
-            const contentLength = await new Promise<number>((resolve, reject) => {
-                formData.getLength((error, length) => {
-                    if (error) {
-                        reject(
-                            new Error(
-                                `Unable to determine transcription upload size: ${error.message}`,
-                            ),
-                        );
-                        return;
-                    }
-
-                    resolve(length);
-                });
-            });
-
-            // 3. Send a fully sized multipart request so Flask can finish parsing it.
-            const flaskUrl = env.TRANSCRIBER_URL;
-            const flaskResponse = await axios.post(`${flaskUrl}/transcribe`, formData, {
+        const flaskUrl = env.TRANSCRIBER_URL;
+        const flaskResponse = await axios.post(
+            `${flaskUrl}/transcribe`,
+            formData,
+            {
                 headers: {
                     ...formData.getHeaders(),
                     "Content-Length": contentLength,
@@ -481,12 +526,45 @@ export async function processVideo(
                 maxBodyLength: Infinity,
                 maxContentLength: Infinity,
                 timeout: 30 * 60 * 1000,
-            });
+            },
+        );
 
-            const transcriptData = transcriptResponseSchema.parse(flaskResponse.data);
-            console.log("Received transcript from Flask:", transcriptData);
+        const transcriptData = transcriptResponseSchema.parse(
+            flaskResponse.data,
+        );
+        const transcript = JSON.stringify(transcriptData.segments);
 
-            const transcript = JSON.stringify(transcriptData.segments);
+        let structuredSegments: StructuredData["segments"] = [];
+
+        if (effectiveJobData.processingMode === "CAPTION_ONLY") {
+            console.log(
+                "CAPTION_ONLY Mode selected. Bypassing Gemini generation.",
+            );
+            const lastSegment =
+                transcriptData.segments[transcriptData.segments.length - 1];
+            const transcriptFallbackDuration = lastSegment
+                ? lastSegment.end + 1
+                : 60;
+            const totalDuration = await getVideoDurationSeconds(
+                videoPath,
+                transcriptFallbackDuration,
+            );
+            const fallbackTitle = parentVideo.title || "Full Captioned Video";
+
+            structuredSegments = [
+                {
+                    segment_title: fallbackTitle,
+                    thumbnail_text: "FULL VIDEO",
+                    start_time: 0,
+                    end_time: totalDuration,
+                    key_points: ["Full video processed for captions"],
+                    social_caption: `Here is the full captioned video for ${fallbackTitle} #captions`,
+                },
+            ];
+        } else {
+            console.log(
+                "CLIP Mode selected. Asking Gemini to extract highlights...",
+            );
             const { object: structuredData }: { object: StructuredData } =
                 await generateObject({
                     model: google("gemini-3.1-flash-lite"),
@@ -496,103 +574,151 @@ export async function processVideo(
                         effectiveJobData.userPrompt,
                     ),
                 });
+            structuredSegments = structuredData.segments;
+        }
 
-            console.log("Parsed structured transcript data:", structuredData);
+        const segmentDataForDb: Array<{
+            videoId: string;
+            clipS3Key: string;
+            captionedClipS3Key: string | null;
+            subtitleS3Key: string | null;
+            startTime: string;
+            endTime: string;
+            title: string;
+            keyPoints: string[];
+            thumbnailText: string;
+            socialCaption: string;
+        }> = [];
 
-            for (const [index, segment] of structuredData.segments.entries()) {
-                const duration = segment.end_time - segment.start_time;
-                if (duration <= 0) {
-                    throw new Error(
-                        `Invalid duration for segment ${index}: ${segment.start_time} to ${segment.end_time}.`,
-                    );
-                }
+        for (const [index, segment] of structuredSegments.entries()) {
+            const duration = segment.end_time - segment.start_time;
+            if (duration <= 0) continue;
 
-                const outputPath = join(
+            const rawClipPath = join(
+                LOCAL_TMP_DIR,
+                `${job.id}-segment-${index}.mp4`,
+            ).replace(/\\/g, "/");
+            temporaryFilesToCleanup.push(rawClipPath);
+
+            await sliceVideo(
+                videoPath,
+                rawClipPath,
+                segment.start_time,
+                duration,
+                effectiveJobData.aspectRatio,
+            );
+
+            const rawClipS3Key = `processed-videos/${job.id}-segment-${index}.mp4`;
+            let captionedClipS3Key: string | null = null;
+            let subtitleS3Key: string | null = null;
+
+            // 1. Generate and Burn Captions
+            if (
+                effectiveJobData.captionStyle !== "NONE" &&
+                transcriptData.words &&
+                transcriptData.words.length > 0
+            ) {
+                const assPath = join(
                     LOCAL_TMP_DIR,
-                    `${job.id}-segment-${index}.mp4`,
+                    `${job.id}-segment-${index}.ass`,
                 ).replace(/\\/g, "/");
-                generatedClips.push(outputPath);
-                await sliceVideo(
-                    videoPath,
-                    outputPath,
-                    segment.start_time,
-                    duration,
-                    effectiveJobData.aspectRatio,
-                );
-            }
+                const captionedPath = join(
+                    LOCAL_TMP_DIR,
+                    `${job.id}-segment-${index}-captioned.mp4`,
+                ).replace(/\\/g, "/");
+                temporaryFilesToCleanup.push(assPath, captionedPath);
 
-            for (const [index, segment] of structuredData.segments.entries()) {
-                const localClipPath = generatedClips[index];
-                if (!localClipPath) {
-                    throw new Error(
-                        `Missing local clip for segment ${index}.`,
+                const captionResult = await generateAndBurnCaptions({
+                    inputClipPath: rawClipPath,
+                    outputClipPath: captionedPath,
+                    outputAssPath: assPath,
+                    words: transcriptData.words,
+                    segmentStartTime: segment.start_time,
+                    segmentEndTime: segment.end_time,
+                    captionStyle: effectiveJobData.captionStyle,
+                    aspectRatio: effectiveJobData.aspectRatio,
+                });
+
+                if (captionResult.captionedClipPath) {
+                    captionedClipS3Key = `processed-videos/${job.id}-segment-${index}-captioned.mp4`;
+                    subtitleS3Key = `processed-videos/${job.id}-segment-${index}.ass`;
+
+                    await uploadS3File(
+                        captionedPath,
+                        captionedClipS3Key,
+                        "video/mp4",
                     );
+                    await uploadS3File(assPath, subtitleS3Key, "text/plain");
                 }
-
-                const clipS3Key = `processed-videos/${job.id}-segment-${index}.mp4`;
-                await uploadS3File(localClipPath, clipS3Key);
             }
 
-            await prisma.$transaction(async (transaction) => {
-                await transaction.videoSegment.createMany({
-                    data: structuredData.segments.map((segment, index) => {
-                        const clipS3Key = `processed-videos/${job.id}-segment-${index}.mp4`;
+            // 2. Upload Raw Clip
+            await uploadS3File(rawClipPath, rawClipS3Key, "video/mp4");
 
-                        return {
-                            videoId: jobData.videoId,
-                            clipS3Key,
-                            startTime: String(segment.start_time),
-                            endTime: String(segment.end_time),
-                            title: segment.segment_title,
-                            keyPoints: segment.key_points,
-                            thumbnailText: segment.thumbnail_text,
-                            socialCaption: segment.social_caption,
-                        };
-                    }),
-                });
+            // 3. Queue DB Payload (Keeping thumbnailText for later generation)
+            segmentDataForDb.push({
+                videoId: jobData.videoId,
+                clipS3Key: rawClipS3Key,
+                captionedClipS3Key,
+                subtitleS3Key,
+                startTime: String(segment.start_time),
+                endTime: String(segment.end_time),
+                title: segment.segment_title,
+                keyPoints: segment.key_points,
+                thumbnailText: segment.thumbnail_text,
+                socialCaption: segment.social_caption,
+            });
+        }
 
-                await transaction.video.update({
-                    where: { id: jobData.videoId },
-                    data: { status: "COMPLETED" },
-                });
+        await prisma.$transaction(async (transaction) => {
+            await transaction.videoSegment.createMany({
+                data: segmentDataForDb,
             });
 
-            return { status: "completed" };
-        } catch (error) {
-            const maxAttempts = job.opts.attempts ?? 1;
-            const attemptsExhausted = job.attemptsMade >= maxAttempts;
+            await transaction.video.update({
+                where: { id: jobData.videoId },
+                data: { status: "COMPLETED" },
+            });
+        });
 
-            if (attemptsExhausted) {
-                try {
-                    await prisma.video.update({
-                        where: { id: jobData.videoId },
-                        data: {
-                            status: "FAILED",
-                            errorMessage:
-                                error instanceof Error ? error.message : String(error),
-                        },
-                    });
-                } catch (statusError) {
-                    console.error(
-                        `Failed to mark video ${jobData.videoId} as FAILED.`,
-                        statusError,
-                    );
-                }
-            } else {
-                console.warn(
-                    `Video ${jobData.videoId} attempt ${job.attemptsMade} of ${maxAttempts} failed; BullMQ will retry it.`,
-                    error,
+        return { status: "completed" };
+    } catch (error) {
+        const maxAttempts = job.opts.attempts ?? 1;
+        const attemptsExhausted = job.attemptsMade >= maxAttempts;
+
+        if (attemptsExhausted) {
+            try {
+                await prisma.video.update({
+                    where: { id: jobData.videoId },
+                    data: {
+                        status: "FAILED",
+                        errorMessage:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    },
+                });
+            } catch (statusError) {
+                console.error(
+                    `Failed to mark video ${jobData.videoId} as FAILED.`,
+                    statusError,
                 );
             }
-
-            throw error;
-        } finally {
-            await Promise.all([
-                rm(videoPath, { force: true }),
-                rm(audioPath, { force: true }),
-                ...generatedClips.map((clipPath) =>
-                    rm(clipPath, { force: true }),
-                ),
-            ]);
+        } else {
+            console.warn(
+                `Video ${jobData.videoId} attempt ${job.attemptsMade} failed; retrying.`,
+                error,
+            );
         }
+
+        throw error;
+    } finally {
+        await Promise.all([
+            rm(videoPath, { force: true }),
+            rm(audioPath, { force: true }),
+            ...temporaryFilesToCleanup.map((filePath) =>
+                rm(filePath, { force: true }).catch(() => undefined),
+            ),
+        ]);
+    }
 }

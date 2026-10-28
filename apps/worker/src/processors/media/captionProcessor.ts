@@ -1,3 +1,4 @@
+import type { Job } from "bullmq";
 import fs from "node:fs/promises";
 import ffmpeg from "fluent-ffmpeg";
 import { z } from "zod";
@@ -245,5 +246,54 @@ export async function generateAndBurnCaptions(
     return {
         captionedClipPath: outputClipPath,
         assFilePath: outputAssPath,
+    };
+}
+
+export const captionJobSchema = z.object({
+    segmentId: z.string().uuid(),
+    videoId: z.string().uuid(),
+    userId: z.string().min(1),
+    inputClipPath: z.string().min(1),
+    outputClipPath: z.string().min(1),
+    outputAssPath: z.string().min(1),
+    words: z.array(wordTimestampSchema),
+    segmentStartTime: z.number(),
+    segmentEndTime: z.number(),
+    captionStyle: z.enum(["NONE", "KARAOKE", "HIGHLIGHT", "MINIMAL"]).default("KARAOKE"),
+    aspectRatio: z.enum(["VERTICAL_9_16", "SQUARE_1_1", "LANDSCAPE_16_9"]).default("VERTICAL_9_16"),
+});
+
+export type CaptionProcessingJobData = z.infer<typeof captionJobSchema>;
+
+/**
+ * BullMQ Job Processor for standalone `createCaption` jobs routed by mediaWorker
+ */
+export async function processCaption(job: Job<CaptionProcessingJobData>) {
+    const payload = captionJobSchema.parse(job.data);
+
+    if (payload.captionStyle === "NONE") {
+        return {
+            segmentId: payload.segmentId,
+            captionedClipPath: null,
+            assFilePath: null,
+            skipped: true,
+        };
+    }
+
+    const result = await generateAndBurnCaptions({
+        inputClipPath: payload.inputClipPath,
+        outputClipPath: payload.outputClipPath,
+        outputAssPath: payload.outputAssPath,
+        words: payload.words,
+        segmentStartTime: payload.segmentStartTime,
+        segmentEndTime: payload.segmentEndTime,
+        captionStyle: payload.captionStyle,
+        aspectRatio: payload.aspectRatio,
+    });
+
+    return {
+        segmentId: payload.segmentId,
+        ...result,
+        skipped: false,
     };
 }
