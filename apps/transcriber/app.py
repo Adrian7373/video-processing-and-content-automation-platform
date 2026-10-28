@@ -1,7 +1,7 @@
 import os
 import tempfile
 from functools import lru_cache
-from typing import Any, TypedDict
+from typing import Any, TypedDict, List
 
 import whisperx
 from faster_whisper import WhisperModel
@@ -12,7 +12,7 @@ app = Flask(__name__)
 
 DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
-MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "small")
+MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "large-v3")
 
 
 class TranscriptSegment(TypedDict):
@@ -21,9 +21,16 @@ class TranscriptSegment(TypedDict):
     text: str
 
 
+class WordTimestamp(TypedDict):
+    word: str
+    start: float
+    end: float
+
+
 class TranscriptionResponse(TypedDict):
     segments: list[TranscriptSegment]
     language: str
+    words: list[WordTimestamp]
 
 
 @lru_cache(maxsize=1)
@@ -31,12 +38,12 @@ def get_whisper_model() -> WhisperModel:
     return WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
 
 
-def extract_sanitized_words(aligned_segments):
+def extract_sanitized_words(aligned_segments) -> List[WordTimestamp]:
     """
     Extracts word-level timestamps from WhisperX aligned segments.
     Interpolates missing timestamps for numbers/punctuation that WhisperX failed to align.
     """
-    words_output = []
+    words_output: List[WordTimestamp] = []
     for seg in aligned_segments:
         seg_start = float(seg.get("start", 0.0))
         seg_end = float(seg.get("end", seg_start + 1.0))
@@ -81,34 +88,48 @@ def transcribe_audio(audio_path: str) -> TranscriptionResponse:
     """Transcribe audio with faster-whisper and align timestamps with WhisperX."""
     model = get_whisper_model()
     segments, info = model.transcribe(audio_path)
+
+    # Materialize faster-whisper generator into a list
     transcript_segments = [
         {"start": segment.start, "end": segment.end, "text": segment.text}
         for segment in segments
     ]
 
-    align_model, align_metadata = whisperx.load_align_model(
-        language_code=info.language,
-        device=DEVICE,
-    )
-    aligned = whisperx.align(
-        transcript_segments,
-        align_model,
-        align_metadata,
-        audio_path,
-        DEVICE,
-        return_char_alignments=False,
-    )
-
-    return {
-        "segments": [
+    words = []
+    try:
+        # Attempt WhisperX alignment to get per-word timestamps
+        align_model, align_metadata = whisperx.load_align_model(
+            language_code=info.language,
+            device=DEVICE,
+        )
+        aligned = whisperx.align(
+            transcript_segments,
+            align_model,
+            align_metadata,
+            audio_path,
+            DEVICE,
+            return_char_alignments=False,
+        )
+        # Update segments to the more accurate aligned segments
+        transcript_segments = [
             {
                 "start": float(segment["start"]),
                 "end": float(segment["end"]),
                 "text": str(segment["text"]),
             }
             for segment in aligned["segments"]
-        ],
+        ]
+        words = extract_sanitized_words(aligned["segments"])
+    except Exception as e:
+        print(
+            f"WhisperX alignment failed (using fallback transcription segments): {e}")
+        # If alignment fails (e.g. HuggingFace network error), words array remains empty.
+        # The worker will still process the video but caption generation will be skipped.
+
+    return {
+        "segments": transcript_segments,
         "language": info.language,
+        "words": words
     }
 
 
@@ -129,9 +150,12 @@ def transcribe() -> tuple[Any, int]:
 
     try:
         uploaded_file.save(temporary_path)
+
+        # This now returns the full TranscriptionResponse dictionary
         result = transcribe_audio(temporary_path)
 
-        return jsonify({"words": extract_sanitized_words(result["segments"])}), 200
+        # Return the complete dictionary directly as JSON
+        return jsonify(result), 200
     finally:
         try:
             os.unlink(temporary_path)
