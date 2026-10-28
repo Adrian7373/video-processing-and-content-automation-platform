@@ -13,12 +13,14 @@ export type AspectRatio =
     | "SQUARE_1_1";
 
 export type CaptionStyle = "NONE" | "KARAOKE" | "HIGHLIGHT" | "MINIMAL";
+export type ProcessingMode = "CLIP" | "CAPTION_ONLY";
 
 export interface MediaProcessingJobData {
     videoId: string;
     s3Key: string;
     userId: string;
     userPrompt?: string | null;
+    processingMode?: ProcessingMode;
     aspectRatio: AspectRatio;
     captionStyle: CaptionStyle;
 }
