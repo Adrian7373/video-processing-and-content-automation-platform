@@ -50,6 +50,60 @@ const aspectClasses = {
     LANDSCAPE_16_9: "aspect-video w-full",
 };
 
+// Shared scheduling hook to keep logic DRY between the Panel and Modal
+function useScheduler(segment: Segment, onSaved: () => void, onSuccess?: () => void) {
+    const [platform, setPlatform] = useState("demo-yt");
+    const [caption, setCaption] = useState(segment.socialCaption ?? "");
+    const [date, setDate] = useState("");
+    const [isScheduling, setIsScheduling] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    // Sync caption if segment changes
+    useEffect(() => {
+        setCaption(segment.socialCaption ?? "");
+    }, [segment.socialCaption]);
+
+    const handleScheduleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError(null);
+
+        if (!date) {
+            setError("Please select a valid date and time.");
+            return;
+        }
+
+        setIsScheduling(true);
+
+        try {
+            const response = await fetch("/api/schedule", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    segmentId: segment.id,
+                    socialAccountIds: [platform], // Changed from accountIds
+                    scheduledFor: new Date(date).toISOString(), // Changed from scheduledDate
+                    caption: caption, // Changed from customCaption
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || "Failed to schedule post.");
+            }
+
+            setDate("");
+            onSaved();
+            if (onSuccess) onSuccess();
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setIsScheduling(false);
+        }
+    };
+
+    return { platform, setPlatform, caption, setCaption, date, setDate, isScheduling, error, handleScheduleSubmit };
+}
+
 export default function StudioClient({ videoId }: { videoId: string }) {
     const [video, setVideo] = useState<Video | null>(null);
     const [activeId, setActiveId] = useState<string | null>(null);
@@ -135,7 +189,7 @@ export default function StudioClient({ videoId }: { videoId: string }) {
 
                 <InsightsPanel segment={active} tab={tab} setTab={setTab} onSaved={load} />
             </div>
-            {active && scheduleOpen && <ScheduleModal segment={active} onClose={() => setScheduleOpen(false)} />}
+            {active && scheduleOpen && <ScheduleModal segment={active} onClose={() => setScheduleOpen(false)} onSaved={load} />}
         </main>
     );
 }
@@ -178,7 +232,7 @@ function InsightsPanel({ segment, tab, setTab, onSaved }: { segment?: Segment; t
                 ))}
             </div>
             {tab === "insights" && <MetadataEditor segment={segment} onSaved={onSaved} />}
-            {tab === "schedule" && <SchedulePanel segment={segment} />}
+            {tab === "schedule" && <SchedulePanel segment={segment} onSaved={onSaved} />}
         </aside>
     );
 }
@@ -265,7 +319,15 @@ function MetadataEditor({ segment, onSaved }: { segment: Segment; onSaved: () =>
     );
 }
 
-function SchedulePanel({ segment }: { segment: Segment }) {
+function SchedulePanel({ segment, onSaved }: { segment: Segment; onSaved: () => void }) {
+    const {
+        platform, setPlatform,
+        caption, setCaption,
+        date, setDate,
+        isScheduling, error,
+        handleScheduleSubmit
+    } = useScheduler(segment, onSaved);
+
     return (
         <div className="space-y-5">
             <h2 className="text-sm font-semibold">Publish & schedule queue</h2>
@@ -285,22 +347,37 @@ function SchedulePanel({ segment }: { segment: Segment }) {
                 <p className="text-xs text-zinc-500">No scheduled posts yet.</p>
             )}
 
-            <form onSubmit={(event) => event.preventDefault()} className="space-y-3 pt-4 border-t border-zinc-800">
-                <select className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200">
-                    <option>YOUTUBE_SHORTS</option>
-                    <option>TIKTOK</option>
-                    <option>INSTAGRAM_REELS</option>
-                    <option>FACEBOOK_REELS</option>
+            <form onSubmit={handleScheduleSubmit} className="space-y-3 pt-4 border-t border-zinc-800">
+                {error && <p className="text-xs text-red-400">{error}</p>}
+                <select
+                    value={platform}
+                    onChange={(e) => setPlatform(e.target.value)}
+                    className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 focus:border-blue-400 focus:outline-none"
+                >
+                    <option value="demo-yt">YouTube Shorts</option>
+                    <option value="demo-tt">TikTok</option>
+                    <option value="demo-ig">Instagram Reels</option>
+                    <option value="demo-fb">Facebook Reels</option>
                 </select>
-                <textarea defaultValue={segment.socialCaption ?? ""} placeholder="Caption and hashtags" rows={4} className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200" />
-                <input type="datetime-local" className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200" />
-                <button type="submit" className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700">Prepare schedule</button>
+                <textarea value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Caption and hashtags" rows={4} className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 focus:border-blue-400 focus:outline-none" />
+                <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 focus:border-blue-400 focus:outline-none" />
+                <button type="submit" disabled={isScheduling} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700 disabled:opacity-50 transition">
+                    {isScheduling ? "Scheduling..." : "Prepare schedule"}
+                </button>
             </form>
         </div>
     );
 }
 
-function ScheduleModal({ segment, onClose }: { segment: Segment; onClose: () => void }) {
+function ScheduleModal({ segment, onClose, onSaved }: { segment: Segment; onClose: () => void; onSaved: () => void }) {
+    const {
+        platform, setPlatform,
+        caption, setCaption,
+        date, setDate,
+        isScheduling, error,
+        handleScheduleSubmit
+    } = useScheduler(segment, onSaved, onClose);
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-5" role="dialog" aria-modal="true" aria-labelledby="schedule-title">
             <div className="w-full max-w-lg rounded-2xl border border-zinc-700 bg-[#18181b] p-6 shadow-2xl">
@@ -309,30 +386,37 @@ function ScheduleModal({ segment, onClose }: { segment: Segment; onClose: () => 
                         <h2 id="schedule-title" className="text-lg font-semibold">Schedule to socials</h2>
                         <p className="mt-1 text-xs text-zinc-500">{segment.title}</p>
                     </div>
-                    <button type="button" onClick={onClose} className="text-xl text-zinc-500 hover:text-white" aria-label="Close scheduling dialog">×</button>
+                    <button type="button" onClick={onClose} className="text-xl text-zinc-500 hover:text-white transition" aria-label="Close scheduling dialog">×</button>
                 </div>
 
-                <form onSubmit={(event) => event.preventDefault()} className="space-y-4">
+                <form onSubmit={handleScheduleSubmit} className="space-y-4">
+                    {error && <p className="text-sm text-red-400 bg-red-400/10 p-2 rounded-lg">{error}</p>}
                     <label className="block text-xs text-zinc-400">
                         Platform
-                        <select className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200">
-                            <option>YOUTUBE_SHORTS</option>
-                            <option>TIKTOK</option>
-                            <option>INSTAGRAM_REELS</option>
-                            <option>FACEBOOK_REELS</option>
+                        <select
+                            value={platform}
+                            onChange={(e) => setPlatform(e.target.value)}
+                            className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 focus:border-blue-400 focus:outline-none"
+                        >
+                            <option value="demo-yt">YouTube Shorts</option>
+                            <option value="demo-tt">TikTok</option>
+                            <option value="demo-ig">Instagram Reels</option>
+                            <option value="demo-fb">Facebook Reels</option>
                         </select>
                     </label>
                     <label className="block text-xs text-zinc-400">
                         Caption and hashtags
-                        <textarea defaultValue={segment.socialCaption ?? ""} rows={4} placeholder="Write a caption..." className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600" />
+                        <textarea value={caption} onChange={(e) => setCaption(e.target.value)} rows={4} placeholder="Write a caption..." className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-blue-400 focus:outline-none" />
                     </label>
                     <label className="block text-xs text-zinc-400">
                         Publish at
-                        <input type="datetime-local" className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200" />
+                        <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 focus:border-blue-400 focus:outline-none" />
                     </label>
                     <div className="flex justify-end gap-2 pt-2">
-                        <button type="button" onClick={onClose} className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800">Cancel</button>
-                        <button type="submit" className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-400">Prepare schedule</button>
+                        <button type="button" onClick={onClose} disabled={isScheduling} className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition disabled:opacity-50">Cancel</button>
+                        <button type="submit" disabled={isScheduling} className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-400 transition disabled:opacity-50">
+                            {isScheduling ? "Scheduling..." : "Prepare schedule"}
+                        </button>
                     </div>
                 </form>
             </div>
