@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
     DndContext,
     DragOverlay,
     useDraggable,
     useDroppable,
     PointerSensor,
+    KeyboardSensor,
     useSensor,
     useSensors,
     type DragStartEvent,
@@ -94,43 +95,161 @@ const DEFAULT_DEMO_ACCOUNTS: CalendarSocialAccountItem[] = [
     { id: "demo-fb", platform: "FACEBOOK_REELS", accountName: "Facebook Reels" },
 ];
 
+const QUICK_TIME_PRESETS = [
+    { label: "Morning", time: "09:00", display: "9:00 AM" },
+    { label: "Lunch", time: "12:00", display: "12:00 PM" },
+    { label: "Prime", time: "18:00", display: "6:00 PM" },
+    { label: "Late", time: "21:00", display: "9:00 PM" },
+] as const;
+
 const PLATFORM_META: Record<
     SocialPlatformType,
-    { label: string; shortLabel: string; badgeClass: string; dotClass: string }
+    {
+        label: string;
+        shortLabel: string;
+        pillSurface: string;
+        accentBar: string;
+        iconColor: string;
+        activeRing: string;
+    }
 > = {
     YOUTUBE_SHORTS: {
         label: "YouTube Shorts",
-        shortLabel: "YT",
-        badgeClass: "border-red-500/40 bg-red-500/15 text-red-300",
-        dotClass: "bg-red-500",
+        shortLabel: "Shorts",
+        pillSurface:
+            "bg-slate-900/95 border-slate-800 hover:border-rose-500/50 text-slate-100",
+        accentBar: "bg-rose-500",
+        iconColor: "text-rose-400",
+        activeRing: "border-rose-500/60 bg-rose-500/10 text-white",
     },
     TIKTOK: {
         label: "TikTok",
-        shortLabel: "TT",
-        badgeClass: "border-cyan-400/40 bg-cyan-400/15 text-cyan-200",
-        dotClass: "bg-cyan-400",
+        shortLabel: "TikTok",
+        pillSurface:
+            "bg-slate-900/95 border-slate-800 hover:border-cyan-400/50 text-slate-100",
+        accentBar: "bg-cyan-400",
+        iconColor: "text-cyan-300",
+        activeRing: "border-cyan-400/60 bg-cyan-400/10 text-white",
     },
     INSTAGRAM_REELS: {
         label: "Instagram Reels",
-        shortLabel: "IG",
-        badgeClass: "border-pink-500/40 bg-pink-500/15 text-pink-300",
-        dotClass: "bg-pink-500",
+        shortLabel: "Reels",
+        pillSurface:
+            "bg-slate-900/95 border-slate-800 hover:border-pink-500/50 text-slate-100",
+        accentBar: "bg-pink-500",
+        iconColor: "text-pink-400",
+        activeRing: "border-pink-500/60 bg-pink-500/10 text-white",
     },
     FACEBOOK_REELS: {
         label: "Facebook Reels",
-        shortLabel: "FB",
-        badgeClass: "border-blue-500/40 bg-blue-500/15 text-blue-300",
-        dotClass: "bg-blue-500",
+        shortLabel: "FB Reels",
+        pillSurface:
+            "bg-slate-900/95 border-slate-800 hover:border-blue-500/50 text-slate-100",
+        accentBar: "bg-blue-500",
+        iconColor: "text-blue-400",
+        activeRing: "border-blue-500/60 bg-blue-500/10 text-white",
     },
 };
 
-const STATUS_BADGE: Record<PublishStatusType, string> = {
-    SCHEDULED: "text-amber-300 bg-amber-500/10 border-amber-500/30",
-    PUBLISHING: "text-sky-300 bg-sky-500/10 border-sky-500/30 animate-pulse",
-    PUBLISHED: "text-emerald-300 bg-emerald-500/10 border-emerald-500/30",
-    FAILED: "text-red-300 bg-red-500/10 border-red-500/30",
-    CANCELLED: "text-neutral-400 bg-neutral-700/20 border-neutral-700",
+const STATUS_META: Record<
+    PublishStatusType,
+    { label: string; badgeClass: string; dotClass: string }
+> = {
+    SCHEDULED: {
+        label: "Scheduled",
+        badgeClass: "border-amber-400/30 bg-amber-400/10 text-amber-300",
+        dotClass: "bg-amber-400",
+    },
+    PUBLISHING: {
+        label: "Publishing",
+        badgeClass: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+        dotClass: "bg-sky-400 animate-ping",
+    },
+    PUBLISHED: {
+        label: "Published",
+        badgeClass: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
+        dotClass: "bg-emerald-400",
+    },
+    FAILED: {
+        label: "Failed",
+        badgeClass: "border-rose-500/30 bg-rose-500/10 text-rose-300",
+        dotClass: "bg-rose-500",
+    },
+    CANCELLED: {
+        label: "Cancelled",
+        badgeClass: "border-slate-700 bg-slate-800/60 text-slate-400",
+        dotClass: "bg-slate-500",
+    },
 };
+
+function PlatformIcon({
+    platform,
+    className = "h-3.5 w-3.5",
+}: {
+    platform: SocialPlatformType;
+    className?: string;
+}) {
+    switch (platform) {
+        case "YOUTUBE_SHORTS":
+            return (
+                <svg
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden="true"
+                    className={className}
+                >
+                    <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z" />
+                </svg>
+            );
+        case "TIKTOK":
+            return (
+                <svg
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden="true"
+                    className={className}
+                >
+                    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
+                </svg>
+            );
+        case "INSTAGRAM_REELS":
+            return (
+                <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                    className={className}
+                >
+                    <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                    <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+                </svg>
+            );
+        case "FACEBOOK_REELS":
+            return (
+                <svg
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden="true"
+                    className={className}
+                >
+                    <path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z" />
+                </svg>
+            );
+    }
+}
+
+function formatDurationBadge(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return mins > 0
+        ? `${mins}:${String(secs).padStart(2, "0")}`
+        : `0:${String(secs).padStart(2, "0")}`;
+}
 
 function DraggableClipCard({
     clip,
@@ -141,71 +260,139 @@ function DraggableClipCard({
     scheduledCount: number;
     onQuickSchedule: (clip: CalendarClipItem) => void;
 }) {
-    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-        id: `clip-${clip.id}`,
-        data: { type: "CLIP", clip } satisfies DragPayload,
-    });
+    const { attributes, listeners, setNodeRef, transform, isDragging } =
+        useDraggable({
+            id: `clip-${clip.id}`,
+            data: { type: "CLIP", clip } satisfies DragPayload,
+        });
 
     const style: React.CSSProperties = {
         transform: CSS.Translate.toString(transform),
     };
 
+    const ratioLabel =
+        clip.aspectRatio === "VERTICAL_9_16"
+            ? "9:16"
+            : clip.aspectRatio === "SQUARE_1_1"
+                ? "1:1"
+                : "16:9";
+
     return (
-        <div
+        <article
             ref={setNodeRef}
             style={style}
             {...listeners}
             {...attributes}
-            className={`group relative cursor-grab rounded-xl border border-neutral-800 bg-[#1C1C1F] p-3.5 transition hover:border-neutral-600 active:cursor-grabbing ${isDragging ? "opacity-40" : "opacity-100"
+            aria-label={`Draggable clip: ${clip.title}`}
+            className={`group relative flex cursor-grab gap-3.5 rounded-xl border border-slate-800/90 bg-slate-900/90 p-3 shadow-sm transition-all duration-150 hover:border-slate-700 hover:bg-slate-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 active:cursor-grabbing ${isDragging ? "scale-[0.98] opacity-35" : "opacity-100"
                 }`}
         >
-            <div className="mb-2 flex items-start justify-between gap-2">
-                <span className="inline-flex items-center rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">
-                    {clip.thumbnailText || "VIRAL HOOK"}
-                </span>
-                <span className="rounded bg-neutral-900 px-1.5 py-0.5 font-mono text-[11px] text-neutral-400">
-                    {clip.durationSeconds}s
+            {/* Reserved 9:16 Media Thumbnail Container (Prevents CLS) */}
+            <div className="relative h-24 w-16 shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+                {clip.thumbnailUrl ? (
+                    <img
+                        src={clip.thumbnailUrl}
+                        alt={clip.title}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                    />
+                ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-b from-slate-900 to-slate-950 p-1.5 text-center">
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.75"
+                            aria-hidden="true"
+                            className="h-5 w-5 text-slate-600 transition-colors group-hover:text-sky-400"
+                        >
+                            <polygon points="5 3 19 12 5 21 5 3" />
+                        </svg>
+                    </div>
+                )}
+
+                {/* Duration Overlay */}
+                <span className="absolute bottom-1 right-1 rounded bg-slate-950/90 px-1 py-0.5 font-mono text-[10px] font-medium text-slate-200">
+                    {formatDurationBadge(clip.durationSeconds)}
                 </span>
             </div>
 
-            <h3 className="line-clamp-1 text-sm font-semibold text-neutral-100">
-                {clip.title}
-            </h3>
-            <p className="mt-0.5 line-clamp-1 text-xs text-neutral-500">
-                {clip.parentVideoTitle}
-            </p>
+            {/* Card Content */}
+            <div className="flex min-w-0 flex-1 flex-col justify-between">
+                <div>
+                    <div className="flex items-center justify-between gap-1.5">
+                        <span className="truncate rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
+                            {clip.thumbnailText || "HIGHLIGHT"}
+                        </span>
 
-            <div className="mt-3 flex items-center justify-between border-t border-neutral-800/80 pt-2.5 text-[11px]">
-                <div className="flex items-center gap-1.5">
-                    <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-300">
-                        {clip.aspectRatio === "VERTICAL_9_16"
-                            ? "9:16"
-                            : clip.aspectRatio === "SQUARE_1_1"
-                                ? "1:1"
-                                : "16:9"}
-                    </span>
-                    {clip.hasBurnedCaptions && (
-                        <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-medium text-emerald-300">
-                            CC Burned
-                        </span>
-                    )}
-                    {scheduledCount > 0 && (
-                        <span className="rounded bg-sky-500/15 px-1.5 py-0.5 font-medium text-sky-300">
-                            {scheduledCount} scheduled
-                        </span>
-                    )}
+                        {/* Subtle Drag Grip Indicator */}
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            aria-hidden="true"
+                            className="h-3.5 w-3.5 shrink-0 text-slate-600 transition-colors group-hover:text-slate-400"
+                        >
+                            <circle cx="9" cy="6" r="1.5" />
+                            <circle cx="15" cy="6" r="1.5" />
+                            <circle cx="9" cy="12" r="1.5" />
+                            <circle cx="15" cy="12" r="1.5" />
+                            <circle cx="9" cy="18" r="1.5" />
+                            <circle cx="15" cy="18" r="1.5" />
+                        </svg>
+                    </div>
+
+                    <h3 className="mt-1.5 line-clamp-1 text-sm font-semibold leading-snug text-slate-100">
+                        {clip.title}
+                    </h3>
+                    <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">
+                        {clip.parentVideoTitle}
+                    </p>
                 </div>
 
-                <button
-                    type="button"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={() => onQuickSchedule(clip)}
-                    className="rounded-md bg-neutral-800 px-2 py-1 font-medium text-neutral-200 transition hover:bg-neutral-200 hover:text-neutral-900"
-                >
-                    + Schedule
-                </button>
+                {/* Metadata & Action Row */}
+                <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-800/80 pt-2">
+                    <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                        <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-slate-300">
+                            {ratioLabel}
+                        </span>
+                        {clip.hasBurnedCaptions && (
+                            <span
+                                title="Burned-in subtitles included"
+                                className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-300"
+                            >
+                                CC
+                            </span>
+                        )}
+                        {scheduledCount > 0 && (
+                            <span className="rounded bg-amber-400/10 px-1.5 py-0.5 font-medium text-amber-300">
+                                {scheduledCount}× queued
+                            </span>
+                        )}
+                    </div>
+
+                    <button
+                        type="button"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => onQuickSchedule(clip)}
+                        aria-label={`Schedule ${clip.title}`}
+                        className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/90 px-2.5 py-1 text-xs font-medium text-slate-100 transition hover:border-sky-400/60 hover:bg-sky-500 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                    >
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            aria-hidden="true"
+                            className="h-3 w-3"
+                        >
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Schedule
+                    </button>
+                </div>
             </div>
-        </div>
+        </article>
     );
 }
 
@@ -216,16 +403,18 @@ function DraggableScheduledPostPill({
     post: CalendarScheduledPostItem;
     onSelectPost: (post: CalendarScheduledPostItem) => void;
 }) {
-    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-        id: `post-${post.id}`,
-        data: { type: "POST", post } satisfies DragPayload,
-    });
+    const { attributes, listeners, setNodeRef, transform, isDragging } =
+        useDraggable({
+            id: `post-${post.id}`,
+            data: { type: "POST", post } satisfies DragPayload,
+        });
 
     const style: React.CSSProperties = {
         transform: CSS.Translate.toString(transform),
     };
 
     const platformMeta = PLATFORM_META[post.platform];
+    const statusMeta = STATUS_META[post.status];
     const timeFormatted = format(parseISO(post.scheduledFor), "h:mm a");
 
     return (
@@ -234,20 +423,49 @@ function DraggableScheduledPostPill({
             style={style}
             {...listeners}
             {...attributes}
-            onClick={() => onSelectPost(post)}
-            className={`group flex cursor-grab items-center justify-between gap-1.5 rounded-lg border px-2 py-1.5 text-xs transition hover:brightness-110 active:cursor-grabbing ${platformMeta.badgeClass
-                } ${isDragging ? "opacity-30" : "opacity-100"}`}
+            role="button"
+            tabIndex={0}
+            aria-label={`${platformMeta.label} post: ${post.segmentTitle} scheduled at ${timeFormatted}`}
+            onClick={(e) => {
+                e.stopPropagation();
+                onSelectPost(post);
+            }}
+            onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelectPost(post);
+                }
+            }}
+            className={`group relative flex cursor-grab items-center justify-between gap-2 overflow-hidden rounded-lg border py-1.5 pl-2.5 pr-2 text-xs shadow-sm transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 active:cursor-grabbing ${platformMeta.pillSurface
+                } ${isDragging ? "scale-95 opacity-30" : "opacity-100"}`}
         >
+            {/* Left Platform Accent Bar */}
+            <span
+                aria-hidden="true"
+                className={`absolute inset-y-0 left-0 w-1 ${platformMeta.accentBar}`}
+            />
+
             <div className="flex min-w-0 items-center gap-1.5">
-                <span className={`h-2 w-2 shrink-0 rounded-full ${platformMeta.dotClass}`} />
-                <span className="font-bold">{platformMeta.shortLabel}</span>
-                <span className="truncate font-medium text-neutral-100">
+                <span className={`shrink-0 ${platformMeta.iconColor}`}>
+                    <PlatformIcon
+                        platform={post.platform}
+                        className="h-3.5 w-3.5"
+                    />
+                </span>
+                <span className="truncate font-medium text-slate-100">
                     {post.segmentTitle}
                 </span>
             </div>
-            <span className="shrink-0 font-mono text-[10px] opacity-80">
-                {timeFormatted}
-            </span>
+
+            <div className="flex shrink-0 items-center gap-1.5">
+                <span className="font-mono text-[10px] text-slate-400">
+                    {timeFormatted}
+                </span>
+                <span
+                    title={`Status: ${statusMeta.label}`}
+                    className={`h-1.5 w-1.5 rounded-full ${statusMeta.dotClass}`}
+                />
+            </div>
         </div>
     );
 }
@@ -276,35 +494,59 @@ function DroppableCalendarDayCell({
     return (
         <div
             ref={setNodeRef}
-            className={`group relative flex min-h-[138px] flex-col justify-between border-b border-r border-neutral-800/80 p-2.5 transition ${isCurrentMonth ? "bg-[#141417]" : "bg-[#0D0D0F] text-neutral-600"
+            className={`group relative flex min-h-[148px] flex-col justify-between border-b border-r border-slate-800/80 p-2.5 transition-colors duration-150 ${isCurrentMonth
+                    ? "bg-slate-950/60 hover:bg-slate-900/50"
+                    : "bg-slate-950/95 text-slate-600"
                 } ${isOver
-                    ? "bg-amber-500/10 ring-2 ring-inset ring-amber-400"
-                    : "hover:bg-[#19191D]"
+                    ? "bg-sky-500/10 ring-2 ring-inset ring-sky-400"
+                    : today
+                        ? "bg-slate-900/40"
+                        : ""
                 }`}
         >
             <div>
+                {/* Day Header */}
                 <div className="mb-2 flex items-center justify-between">
-                    <span
-                        className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${today
-                                ? "bg-amber-400 text-neutral-950"
-                                : isCurrentMonth
-                                    ? "text-neutral-300"
-                                    : "text-neutral-600"
-                            }`}
-                    >
-                        {format(day, "d")}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                        <span
+                            className={`inline-flex h-7 w-7 items-center justify-center rounded-lg text-xs font-semibold transition-colors ${today
+                                    ? "bg-sky-400 font-bold text-slate-950 shadow-sm shadow-sky-400/30"
+                                    : isCurrentMonth
+                                        ? "text-slate-200"
+                                        : "text-slate-600"
+                                }`}
+                        >
+                            {format(day, "d")}
+                        </span>
+                        {today && (
+                            <span className="rounded bg-sky-400/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
+                                Today
+                            </span>
+                        )}
+                    </div>
 
+                    {/* Accessible Add Button (Always Keyboard-Focusable, Visible on Subtle Contrast) */}
                     <button
                         type="button"
                         onClick={() => onAddClick(day)}
-                        className="rounded px-1.5 py-0.5 text-[11px] font-medium text-neutral-400 opacity-0 transition hover:bg-neutral-800 hover:text-white group-hover:opacity-100"
-                        title="Schedule a clip on this day"
+                        aria-label={`Schedule clip on ${format(day, "MMMM d, yyyy")}`}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-slate-500 transition hover:border-slate-700 hover:bg-slate-800 hover:text-slate-100 focus-visible:border-sky-400 focus-visible:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
                     >
-                        + Add
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            aria-hidden="true"
+                            className="h-3.5 w-3.5"
+                        >
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
                     </button>
                 </div>
 
+                {/* Scheduled Posts List */}
                 <div className="space-y-1.5">
                     {posts.map((post) => (
                         <DraggableScheduledPostPill
@@ -316,8 +558,20 @@ function DroppableCalendarDayCell({
                 </div>
             </div>
 
+            {/* Active Drop Zone Feedback */}
             {isOver && (
-                <div className="mt-2 rounded border border-dashed border-amber-400/60 bg-amber-500/10 py-1 text-center text-[10px] font-semibold uppercase tracking-wider text-amber-300">
+                <div className="mt-2 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-sky-400/70 bg-sky-500/10 py-1.5 text-[11px] font-semibold text-sky-300">
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        aria-hidden="true"
+                        className="h-3.5 w-3.5"
+                    >
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
                     Drop to Schedule
                 </div>
             )}
@@ -331,9 +585,13 @@ export default function CalendarClient({
     initialAccounts,
 }: CalendarClientProps) {
     const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
-    const [posts, setPosts] = useState<CalendarScheduledPostItem[]>(initialPosts);
+    const [posts, setPosts] =
+        useState<CalendarScheduledPostItem[]>(initialPosts);
     const [searchQuery, setSearchQuery] = useState("");
     const [onlyUnscheduled, setOnlyUnscheduled] = useState(false);
+    const [platformFilter, setPlatformFilter] = useState<
+        SocialPlatformType | "ALL"
+    >("ALL");
 
     // Active drag state
     const [activeDrag, setActiveDrag] = useState<DragPayload | null>(null);
@@ -347,15 +605,18 @@ export default function CalendarClient({
     const [modalTimeString, setModalTimeString] = useState<string>("18:00");
     const [modalCaption, setModalCaption] = useState<string>("");
     const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
+    const [formError, setFormError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Post Details Drawer/Modal state
-    const [selectedPost, setSelectedPost] = useState<CalendarScheduledPostItem | null>(
-        null,
-    );
+    // Post Details Modal state
+    const [selectedPost, setSelectedPost] =
+        useState<CalendarScheduledPostItem | null>(null);
 
     const accounts = useMemo(
-        () => (initialAccounts.length > 0 ? initialAccounts : DEFAULT_DEMO_ACCOUNTS),
+        () =>
+            initialAccounts.length > 0
+                ? initialAccounts
+                : DEFAULT_DEMO_ACCOUNTS,
         [initialAccounts],
     );
 
@@ -365,9 +626,21 @@ export default function CalendarClient({
                 distance: 6,
             },
         }),
+        useSensor(KeyboardSensor),
     );
 
-    // Build the 7-column calendar days array
+    // Close modals on Escape key for keyboard accessibility
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                setIsScheduleModalOpen(false);
+                setSelectedPost(null);
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, []);
+
     const calendarDays = useMemo(() => {
         const monthStart = startOfMonth(currentMonth);
         const monthEnd = endOfMonth(monthStart);
@@ -377,7 +650,6 @@ export default function CalendarClient({
         return eachDayOfInterval({ start: gridStart, end: gridEnd });
     }, [currentMonth]);
 
-    // Count how many posts each clip has
     const scheduledCountByClipId = useMemo(() => {
         const map = new Map<string, number>();
         for (const post of posts) {
@@ -407,6 +679,22 @@ export default function CalendarClient({
         });
     }, [initialClips, searchQuery, onlyUnscheduled, scheduledCountByClipId]);
 
+    // Monthly KPI Summary
+    const monthMetrics = useMemo(() => {
+        const activeMonthPosts = posts.filter(
+            (p) =>
+                p.status !== "CANCELLED" &&
+                isSameMonth(parseISO(p.scheduledFor), currentMonth),
+        );
+        return {
+            total: activeMonthPosts.length,
+            scheduled: activeMonthPosts.filter((p) => p.status === "SCHEDULED")
+                .length,
+            published: activeMonthPosts.filter((p) => p.status === "PUBLISHED")
+                .length,
+        };
+    }, [posts, currentMonth]);
+
     const openScheduleModal = (clip: CalendarClipItem, targetDate?: Date) => {
         setModalClip(clip);
         setModalDateString(format(targetDate ?? new Date(), "yyyy-MM-dd"));
@@ -415,6 +703,7 @@ export default function CalendarClient({
             clip.socialCaption || `${clip.title} #shorts #reels #tiktok`,
         );
         setSelectedAccountIds(accounts[0] ? [accounts[0].id] : []);
+        setFormError(null);
         setIsScheduleModalOpen(true);
     };
 
@@ -452,7 +741,6 @@ export default function CalendarClient({
             );
             const newIso = updatedDate.toISOString();
 
-            // Optimistically update the calendar immediately
             setPosts((prev) =>
                 prev.map((item) =>
                     item.id === payload.post.id
@@ -461,7 +749,6 @@ export default function CalendarClient({
                 ),
             );
 
-            // Attempt background sync with /api/schedule/[postId]
             try {
                 await fetch(`/api/schedule/${payload.post.id}`, {
                     method: "PATCH",
@@ -469,12 +756,13 @@ export default function CalendarClient({
                     body: JSON.stringify({ scheduledFor: newIso }),
                 });
             } catch {
-                // Keep optimistic UI state when testing before API route is wired
+                // Keep optimistic UI state
             }
         }
     };
 
     const toggleAccountSelection = (accountId: string) => {
+        setFormError(null);
         setSelectedAccountIds((prev) =>
             prev.includes(accountId)
                 ? prev.filter((id) => id !== accountId)
@@ -484,16 +772,22 @@ export default function CalendarClient({
 
     const handleScheduleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
-        if (!modalClip || selectedAccountIds.length === 0) return;
+        if (!modalClip) return;
+
+        if (selectedAccountIds.length === 0) {
+            setFormError("Select at least one target platform to schedule.");
+            return;
+        }
 
         setIsSubmitting(true);
+        setFormError(null);
+
         const scheduledDateTime = new Date(
             `${modalDateString}T${modalTimeString}:00`,
         );
         const scheduledIso = scheduledDateTime.toISOString();
 
         try {
-            // Try hitting backend endpoint if wired; fallback to optimistic creation
             const response = await fetch("/api/schedule", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -521,7 +815,6 @@ export default function CalendarClient({
             setIsSubmitting(false);
         }
 
-        // Optimistic UI fallback so calendar works visually right away
         const optimisticNewPosts: CalendarScheduledPostItem[] =
             selectedAccountIds.map((accId) => {
                 const account =
@@ -564,44 +857,95 @@ export default function CalendarClient({
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
         >
-            <div className="mx-auto grid max-w-[1600px] grid-cols-1 lg:grid-cols-[360px_1fr]">
-                {/* LEFT SIDEBAR: Draggable Clips Backlog */}
-                <aside className="flex h-[calc(100vh-73px)] flex-col border-r border-neutral-800 bg-[#141416]">
-                    <div className="border-b border-neutral-800 p-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-sm font-semibold text-white">
-                                Ready Clips ({filteredClips.length})
-                            </h2>
-                            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-neutral-400">
+            <div className="mx-auto grid max-w-[1600px] grid-cols-1 bg-slate-950 text-slate-100 lg:grid-cols-[380px_1fr]">
+                {/* LEFT SIDEBAR: Ready Clips Backlog */}
+                <aside
+                    aria-label="Unscheduled Clips Library"
+                    className="flex h-[calc(100vh-73px)] flex-col border-r border-slate-800/90 bg-slate-900/40"
+                >
+                    <div className="border-b border-slate-800/90 p-4">
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-sm font-semibold tracking-tight text-slate-100">
+                                    Clip Library
+                                </h2>
+                                <span
+                                    aria-live="polite"
+                                    className="rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 font-mono text-xs font-medium text-slate-300"
+                                >
+                                    {filteredClips.length}
+                                </span>
+                            </div>
+
+                            <label className="inline-flex cursor-pointer select-none items-center gap-2 text-xs font-medium text-slate-300 hover:text-white">
                                 <input
                                     type="checkbox"
                                     checked={onlyUnscheduled}
                                     onChange={(e) =>
                                         setOnlyUnscheduled(e.target.checked)
                                     }
-                                    className="rounded border-neutral-700 bg-neutral-900 text-amber-400 focus:ring-0"
+                                    className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-400 focus:ring-2 focus:ring-sky-400 focus:ring-offset-0"
                                 />
                                 Unscheduled only
                             </label>
                         </div>
 
-                        <input
-                            type="search"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search clips or videos..."
-                            className="mt-3 block w-full rounded-lg border border-neutral-800 bg-[#0F0F11] px-3 py-2 text-xs text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
-                        />
+                        {/* Search Field with SVG Icon */}
+                        <div className="relative mt-3">
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                aria-hidden="true"
+                                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
+                            >
+                                <circle cx="11" cy="11" r="8" />
+                                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                            </svg>
+                            <input
+                                type="search"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                aria-label="Search clips by title"
+                                placeholder="Search clips or source video..."
+                                className="block w-full rounded-xl border border-slate-800 bg-slate-950/90 py-2 pl-9 pr-3 text-xs text-slate-100 placeholder:text-slate-500 transition focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                            />
+                        </div>
                     </div>
 
                     <div className="flex-1 space-y-3 overflow-y-auto p-4">
                         {filteredClips.length === 0 ? (
-                            <div className="rounded-xl border border-dashed border-neutral-800 p-6 text-center">
-                                <p className="text-sm font-medium text-neutral-300">
-                                    No clips found
+                            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 px-5 py-10 text-center">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800/80 text-slate-400">
+                                    <svg
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.75"
+                                        aria-hidden="true"
+                                        className="h-5 w-5"
+                                    >
+                                        <rect
+                                            x="2"
+                                            y="2"
+                                            width="20"
+                                            height="20"
+                                            rx="2.18"
+                                            ry="2.18"
+                                        />
+                                        <line x1="7" y1="2" x2="7" y2="22" />
+                                        <line x1="17" y1="2" x2="17" y2="22" />
+                                        <line x1="2" y1="12" x2="22" y2="12" />
+                                    </svg>
+                                </div>
+                                <p className="mt-3 text-sm font-semibold text-slate-200">
+                                    No matching clips
                                 </p>
-                                <p className="mt-1 text-xs text-neutral-500">
-                                    Process a video first or clear your filter to drag clips onto the calendar.
+                                <p className="mt-1 max-w-[220px] text-xs leading-relaxed text-slate-400">
+                                    {onlyUnscheduled
+                                        ? "All available clips have been scheduled. Uncheck the filter to re-queue."
+                                        : "Process a video in the studio or clear your search query."}
                                 </p>
                             </div>
                         ) : (
@@ -612,35 +956,48 @@ export default function CalendarClient({
                                     scheduledCount={
                                         scheduledCountByClipId.get(clip.id) ?? 0
                                     }
-                                    onQuickSchedule={(c) => openScheduleModal(c)}
+                                    onQuickSchedule={(c) =>
+                                        openScheduleModal(c)
+                                    }
                                 />
                             ))
                         )}
                     </div>
                 </aside>
 
-                {/* RIGHT MAIN AREA: Monthly Calendar Grid */}
-                <section className="flex min-h-[calc(100vh-73px)] flex-col bg-[#101013]">
-                    {/* Calendar Toolbar */}
-                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-neutral-800 px-6 py-4">
-                        <div className="flex items-center gap-3">
-                            <h2 className="text-lg font-bold text-white">
-                                {format(currentMonth, "MMMM yyyy")}
-                            </h2>
-                            <div className="flex items-center rounded-lg border border-neutral-800 bg-[#18181B]">
+                {/* RIGHT MAIN WORKSPACE: Calendar */}
+                <section
+                    aria-label="Monthly Content Schedule"
+                    className="flex min-h-[calc(100vh-73px)] flex-col bg-slate-950"
+                >
+                    {/* Calendar Top Control Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/90 bg-slate-900/50 px-6 py-3.5">
+                        {/* Left: Month Title & 44px Touch-Friendly Navigation */}
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center rounded-xl border border-slate-800 bg-slate-900 p-0.5">
                                 <button
                                     type="button"
                                     onClick={() =>
                                         setCurrentMonth((m) => subMonths(m, 1))
                                     }
-                                    className="px-2.5 py-1 text-sm text-neutral-300 hover:bg-neutral-800 hover:text-white"
+                                    aria-label="Previous month"
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
                                 >
-                                    ‹
+                                    <svg
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        aria-hidden="true"
+                                        className="h-4 w-4"
+                                    >
+                                        <polyline points="15 18 9 12 15 6" />
+                                    </svg>
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setCurrentMonth(new Date())}
-                                    className="border-x border-neutral-800 px-3 py-1 text-xs font-medium text-neutral-300 hover:bg-neutral-800 hover:text-white"
+                                    className="px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
                                 >
                                     Today
                                 </button>
@@ -649,40 +1006,97 @@ export default function CalendarClient({
                                     onClick={() =>
                                         setCurrentMonth((m) => addMonths(m, 1))
                                     }
-                                    className="px-2.5 py-1 text-sm text-neutral-300 hover:bg-neutral-800 hover:text-white"
+                                    aria-label="Next month"
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
                                 >
-                                    ›
+                                    <svg
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        aria-hidden="true"
+                                        className="h-4 w-4"
+                                    >
+                                        <polyline points="9 18 15 12 9 6" />
+                                    </svg>
                                 </button>
+                            </div>
+
+                            <div>
+                                <h2 className="text-lg font-bold tracking-tight text-white">
+                                    {format(currentMonth, "MMMM yyyy")}
+                                </h2>
+                                <p className="text-xs text-slate-400">
+                                    <span className="font-semibold text-slate-200">
+                                        {monthMetrics.scheduled}
+                                    </span>{" "}
+                                    queued ·{" "}
+                                    <span className="font-semibold text-emerald-400">
+                                        {monthMetrics.published}
+                                    </span>{" "}
+                                    published this month
+                                </p>
                             </div>
                         </div>
 
-                        {/* Platform Legend */}
-                        <div className="flex flex-wrap items-center gap-3 text-xs">
+                        {/* Right: Interactive Platform Filter Pills */}
+                        <div
+                            role="group"
+                            aria-label="Filter calendar by platform"
+                            className="flex flex-wrap items-center gap-1.5"
+                        >
+                            <button
+                                type="button"
+                                onClick={() => setPlatformFilter("ALL")}
+                                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${platformFilter === "ALL"
+                                        ? "border-sky-400/60 bg-sky-400/15 text-sky-200"
+                                        : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                                    }`}
+                            >
+                                All Channels
+                            </button>
+
                             {(
                                 Object.keys(
                                     PLATFORM_META,
                                 ) as SocialPlatformType[]
-                            ).map((platform) => (
-                                <div
-                                    key={platform}
-                                    className="flex items-center gap-1.5 text-neutral-400"
-                                >
-                                    <span
-                                        className={`h-2.5 w-2.5 rounded-full ${PLATFORM_META[platform].dotClass}`}
-                                    />
-                                    <span>{PLATFORM_META[platform].label}</span>
-                                </div>
-                            ))}
+                            ).map((platform) => {
+                                const meta = PLATFORM_META[platform];
+                                const active = platformFilter === platform;
+                                return (
+                                    <button
+                                        key={platform}
+                                        type="button"
+                                        onClick={() =>
+                                            setPlatformFilter(
+                                                active ? "ALL" : platform,
+                                            )
+                                        }
+                                        className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${active
+                                                ? meta.activeRing
+                                                : "border-slate-800 bg-slate-900/90 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                                            }`}
+                                    >
+                                        <span className={meta.iconColor}>
+                                            <PlatformIcon
+                                                platform={platform}
+                                                className="h-3.5 w-3.5"
+                                            />
+                                        </span>
+                                        <span>{meta.shortLabel}</span>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 
-                    {/* Weekday Header Row */}
-                    <div className="grid grid-cols-7 border-b border-neutral-800 bg-[#16161A] text-center text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                    {/* Weekday Column Headers */}
+                    <div className="grid grid-cols-7 border-b border-slate-800 bg-slate-900/80 text-center text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                             (dayName) => (
                                 <div
                                     key={dayName}
-                                    className="border-r border-neutral-800/80 py-2.5 last:border-r-0"
+                                    className="border-r border-slate-800/80 py-2.5 last:border-r-0"
                                 >
                                     {dayName}
                                 </div>
@@ -690,12 +1104,14 @@ export default function CalendarClient({
                         )}
                     </div>
 
-                    {/* 7-Column Days Grid */}
+                    {/* 7-Column Calendar Grid */}
                     <div className="grid flex-1 grid-cols-7">
                         {calendarDays.map((day) => {
                             const dayPosts = posts.filter(
                                 (p) =>
                                     p.status !== "CANCELLED" &&
+                                    (platformFilter === "ALL" ||
+                                        p.platform === platformFilter) &&
                                     isSameDay(parseISO(p.scheduledFor), day),
                             );
 
@@ -728,253 +1144,455 @@ export default function CalendarClient({
                 </section>
             </div>
 
-            {/* Floating Drag Overlay */}
+            {/* Drag Overlay with Spatial Continuity */}
             <DragOverlay>
                 {activeDrag?.type === "CLIP" && (
-                    <div className="w-72 rounded-xl border border-amber-400 bg-[#1C1C1F] p-3.5 shadow-2xl">
-                        <span className="inline-block rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-                            {activeDrag.clip.thumbnailText}
-                        </span>
-                        <p className="mt-1 truncate text-sm font-semibold text-white">
-                            {activeDrag.clip.title}
-                        </p>
+                    <div className="flex w-72 items-center gap-3 rounded-xl border border-sky-400 bg-slate-900/95 p-3 shadow-2xl ring-4 ring-sky-500/20">
+                        <div className="flex h-12 w-9 shrink-0 items-center justify-center rounded-md bg-slate-950 font-mono text-[10px] font-bold text-sky-300">
+                            {formatDurationBadge(
+                                activeDrag.clip.durationSeconds,
+                            )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <span className="inline-block rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-sky-300">
+                                {activeDrag.clip.thumbnailText}
+                            </span>
+                            <p className="mt-1 truncate text-xs font-semibold text-white">
+                                {activeDrag.clip.title}
+                            </p>
+                        </div>
                     </div>
                 )}
                 {activeDrag?.type === "POST" && (
-                    <div className="w-56 rounded-lg border border-amber-400 bg-[#1C1C1F] px-3 py-2 text-xs font-semibold text-white shadow-2xl">
-                        Rescheduling: {activeDrag.post.segmentTitle}
+                    <div className="flex w-60 items-center gap-2 rounded-lg border border-sky-400 bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-2xl ring-4 ring-sky-500/20">
+                        <span
+                            className={
+                                PLATFORM_META[activeDrag.post.platform]
+                                    .iconColor
+                            }
+                        >
+                            <PlatformIcon
+                                platform={activeDrag.post.platform}
+                                className="h-4 w-4"
+                            />
+                        </span>
+                        <span className="truncate">
+                            Move: {activeDrag.post.segmentTitle}
+                        </span>
                     </div>
                 )}
             </DragOverlay>
 
-            {/* SCHEDULE MODAL */}
+            {/* SCHEDULE POST MODAL */}
             {isScheduleModalOpen && modalClip && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-                    <div className="w-full max-w-lg rounded-2xl border border-neutral-800 bg-[#18181C] p-6 shadow-2xl">
-                        <div className="flex items-start justify-between">
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="schedule-modal-title"
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+                >
+                    <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
                             <div>
-                                <p className="text-xs font-semibold uppercase tracking-wider text-amber-400">
-                                    Auto-Publish Scheduler
-                                </p>
-                                <h3 className="mt-1 text-lg font-bold text-white">
-                                    Schedule &ldquo;{modalClip.title}&rdquo;
+                                <span className="text-[11px] font-semibold uppercase tracking-widest text-sky-400">
+                                    Schedule Distribution
+                                </span>
+                                <h3
+                                    id="schedule-modal-title"
+                                    className="mt-0.5 text-base font-bold text-white"
+                                >
+                                    {modalClip.title}
                                 </h3>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setIsScheduleModalOpen(false)}
-                                className="rounded-lg p-1 text-neutral-400 hover:bg-neutral-800 hover:text-white"
+                                aria-label="Close schedule modal"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
                             >
-                                ✕
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    aria-hidden="true"
+                                    className="h-4 w-4"
+                                >
+                                    <line x1="18" y1="6" x2="6" y2="18" />
+                                    <line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
                             </button>
                         </div>
 
                         <form
                             onSubmit={handleScheduleSubmit}
-                            className="mt-5 space-y-4"
+                            className="grid grid-cols-1 gap-6 p-6 md:grid-cols-[200px_1fr]"
                         >
-                            {/* Select Clip Switcher */}
-                            <div>
-                                <label className="mb-1.5 block text-xs font-medium text-neutral-300">
-                                    Selected Clip
-                                </label>
-                                <select
-                                    value={modalClip.id}
-                                    onChange={(e) => {
-                                        const found = initialClips.find(
-                                            (c) => c.id === e.target.value,
-                                        );
-                                        if (found) {
-                                            setModalClip(found);
-                                            setModalCaption(
-                                                found.socialCaption ||
-                                                found.title,
-                                            );
-                                        }
-                                    }}
-                                    className="block w-full rounded-lg border border-neutral-700 bg-[#111114] px-3 py-2 text-sm text-neutral-200"
-                                >
-                                    {initialClips.map((c) => (
-                                        <option key={c.id} value={c.id}>
-                                            {c.title} ({c.durationSeconds}s)
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+                            {/* Left Column: Media Preview */}
+                            <div className="flex flex-col justify-between rounded-xl border border-slate-800 bg-slate-950 p-3">
+                                <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-slate-900">
+                                    {modalClip.previewVideoUrl ? (
+                                        <video
+                                            src={modalClip.previewVideoUrl}
+                                            poster={
+                                                modalClip.thumbnailUrl ??
+                                                undefined
+                                            }
+                                            controls
+                                            preload="metadata"
+                                            className="h-full w-full object-cover"
+                                        />
+                                    ) : modalClip.thumbnailUrl ? (
+                                        <img
+                                            src={modalClip.thumbnailUrl}
+                                            alt={modalClip.title}
+                                            className="h-full w-full object-cover"
+                                        />
+                                    ) : (
+                                        <div className="flex h-full flex-col items-center justify-center p-4 text-center">
+                                            <span className="rounded bg-sky-500/15 px-2 py-1 text-[10px] font-bold text-sky-300">
+                                                {modalClip.thumbnailText}
+                                            </span>
+                                            <p className="mt-2 text-xs text-slate-400">
+                                                {modalClip.title}
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
 
-                            {/* Target Platforms Multi-Select */}
-                            <div>
-                                <span className="mb-1.5 block text-xs font-medium text-neutral-300">
-                                    Publish To Platforms
-                                </span>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {accounts.map((acc) => {
-                                        const isSelected =
-                                            selectedAccountIds.includes(acc.id);
-                                        const meta =
-                                            PLATFORM_META[acc.platform];
-                                        return (
-                                            <button
-                                                key={acc.id}
-                                                type="button"
-                                                onClick={() =>
-                                                    toggleAccountSelection(
-                                                        acc.id,
-                                                    )
-                                                }
-                                                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs font-medium transition ${isSelected
-                                                        ? "border-amber-400 bg-amber-400/10 text-white"
-                                                        : "border-neutral-800 bg-[#111114] text-neutral-400 hover:border-neutral-700"
-                                                    }`}
-                                            >
-                                                <span
-                                                    className={`h-2.5 w-2.5 rounded-full ${meta.dotClass}`}
-                                                />
-                                                <span className="truncate">
-                                                    {acc.accountName}
-                                                </span>
-                                            </button>
-                                        );
-                                    })}
+                                <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
+                                    <span>Duration</span>
+                                    <span className="font-mono font-semibold text-slate-200">
+                                        {formatDurationBadge(
+                                            modalClip.durationSeconds,
+                                        )}
+                                    </span>
                                 </div>
                             </div>
 
-                            {/* Date & Time Picker */}
-                            <div className="grid grid-cols-2 gap-3">
-                                <label className="block">
-                                    <span className="mb-1.5 block text-xs font-medium text-neutral-300">
-                                        Publish Date
-                                    </span>
-                                    <input
-                                        type="date"
-                                        required
-                                        value={modalDateString}
-                                        onChange={(e) =>
-                                            setModalDateString(e.target.value)
-                                        }
-                                        className="block w-full rounded-lg border border-neutral-700 bg-[#111114] px-3 py-2 text-sm text-neutral-200"
-                                    />
-                                </label>
-                                <label className="block">
-                                    <span className="mb-1.5 block text-xs font-medium text-neutral-300">
-                                        Publish Time
-                                    </span>
-                                    <input
-                                        type="time"
-                                        required
-                                        value={modalTimeString}
-                                        onChange={(e) =>
-                                            setModalTimeString(e.target.value)
-                                        }
-                                        className="block w-full rounded-lg border border-neutral-700 bg-[#111114] px-3 py-2 text-sm text-neutral-200"
-                                    />
-                                </label>
-                            </div>
+                            {/* Right Column: Form Controls */}
+                            <div className="space-y-4">
+                                {/* Clip Selector */}
+                                <div>
+                                    <label
+                                        htmlFor="schedule-clip-select"
+                                        className="mb-1.5 block text-xs font-semibold text-slate-300"
+                                    >
+                                        Active Clip
+                                    </label>
+                                    <select
+                                        id="schedule-clip-select"
+                                        value={modalClip.id}
+                                        onChange={(e) => {
+                                            const found = initialClips.find(
+                                                (c) => c.id === e.target.value,
+                                            );
+                                            if (found) {
+                                                setModalClip(found);
+                                                setModalCaption(
+                                                    found.socialCaption ||
+                                                    found.title,
+                                                );
+                                            }
+                                        }}
+                                        className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                    >
+                                        {initialClips.map((c) => (
+                                            <option key={c.id} value={c.id}>
+                                                {c.title} (
+                                                {formatDurationBadge(
+                                                    c.durationSeconds,
+                                                )}
+                                                )
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                            {/* Social Caption */}
-                            <label className="block">
-                                <span className="mb-1.5 block text-xs font-medium text-neutral-300">
-                                    Post Caption & Hashtags
-                                </span>
-                                <textarea
-                                    rows={4}
-                                    value={modalCaption}
-                                    onChange={(e) =>
-                                        setModalCaption(e.target.value)
-                                    }
-                                    placeholder="Write a viral hook and hashtags..."
-                                    className="block w-full rounded-lg border border-neutral-700 bg-[#111114] p-3 text-sm text-neutral-200"
-                                />
-                            </label>
+                                {/* Target Channels */}
+                                <div>
+                                    <div className="mb-1.5 flex items-center justify-between">
+                                        <span className="text-xs font-semibold text-slate-300">
+                                            Target Channels
+                                        </span>
+                                        <span className="text-[11px] text-slate-400">
+                                            {selectedAccountIds.length} selected
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {accounts.map((acc) => {
+                                            const isSelected =
+                                                selectedAccountIds.includes(
+                                                    acc.id,
+                                                );
+                                            const meta =
+                                                PLATFORM_META[acc.platform];
+                                            return (
+                                                <button
+                                                    key={acc.id}
+                                                    type="button"
+                                                    aria-pressed={isSelected}
+                                                    onClick={() =>
+                                                        toggleAccountSelection(
+                                                            acc.id,
+                                                        )
+                                                    }
+                                                    className={`flex min-h-[42px] items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${isSelected
+                                                            ? meta.activeRing
+                                                            : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                                                        }`}
+                                                >
+                                                    <span
+                                                        className={
+                                                            meta.iconColor
+                                                        }
+                                                    >
+                                                        <PlatformIcon
+                                                            platform={
+                                                                acc.platform
+                                                            }
+                                                            className="h-4 w-4"
+                                                        />
+                                                    </span>
+                                                    <span className="truncate">
+                                                        {acc.accountName}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    {formError && (
+                                        <p
+                                            role="alert"
+                                            className="mt-1.5 text-xs font-medium text-rose-400"
+                                        >
+                                            {formError}
+                                        </p>
+                                    )}
+                                </div>
 
-                            <div className="flex items-center justify-end gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setIsScheduleModalOpen(false)
-                                    }
-                                    className="rounded-lg border border-neutral-700 px-4 py-2 text-xs font-medium text-neutral-300 hover:bg-neutral-800"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={
-                                        isSubmitting ||
-                                        selectedAccountIds.length === 0
-                                    }
-                                    className="rounded-lg bg-amber-400 px-5 py-2 text-xs font-bold text-neutral-950 transition hover:bg-amber-300 disabled:opacity-50"
-                                >
-                                    {isSubmitting
-                                        ? "Scheduling..."
-                                        : `Schedule (${selectedAccountIds.length})`}
-                                </button>
+                                {/* Date & Time + Quick Presets */}
+                                <div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <label className="block">
+                                            <span className="mb-1.5 block text-xs font-semibold text-slate-300">
+                                                Publish Date
+                                            </span>
+                                            <input
+                                                type="date"
+                                                required
+                                                value={modalDateString}
+                                                onChange={(e) =>
+                                                    setModalDateString(
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1.5 block text-xs font-semibold text-slate-300">
+                                                Publish Time
+                                            </span>
+                                            <input
+                                                type="time"
+                                                required
+                                                value={modalTimeString}
+                                                onChange={(e) =>
+                                                    setModalTimeString(
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                            />
+                                        </label>
+                                    </div>
+
+                                    {/* Optimal Time Presets */}
+                                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                        <span className="mr-1 text-[11px] text-slate-400">
+                                            Quick slots:
+                                        </span>
+                                        {QUICK_TIME_PRESETS.map((preset) => (
+                                            <button
+                                                key={preset.time}
+                                                type="button"
+                                                onClick={() =>
+                                                    setModalTimeString(
+                                                        preset.time,
+                                                    )
+                                                }
+                                                className={`rounded-md border px-2 py-0.5 font-mono text-[11px] transition ${modalTimeString ===
+                                                        preset.time
+                                                        ? "border-sky-400/60 bg-sky-400/15 text-sky-300"
+                                                        : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                                                    }`}
+                                            >
+                                                {preset.display}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Caption & Character Counter */}
+                                <div>
+                                    <div className="mb-1.5 flex items-center justify-between">
+                                        <label
+                                            htmlFor="schedule-caption-input"
+                                            className="text-xs font-semibold text-slate-300"
+                                        >
+                                            Caption & Hashtags
+                                        </label>
+                                        <span className="font-mono text-[11px] text-slate-400">
+                                            {modalCaption.length} / 2200
+                                        </span>
+                                    </div>
+                                    <textarea
+                                        id="schedule-caption-input"
+                                        rows={3}
+                                        maxLength={2200}
+                                        value={modalCaption}
+                                        onChange={(e) =>
+                                            setModalCaption(e.target.value)
+                                        }
+                                        placeholder="Write a hook and relevant hashtags (#shorts #reels #tiktok)..."
+                                        className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs leading-relaxed text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                    />
+                                </div>
+
+                                {/* Submit Actions */}
+                                <div className="flex items-center justify-end gap-2.5 border-t border-slate-800 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setIsScheduleModalOpen(false)
+                                        }
+                                        className="min-h-[40px] rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="min-h-[40px] rounded-xl bg-sky-400 px-5 py-2 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-sky-300 disabled:opacity-50"
+                                    >
+                                        {isSubmitting
+                                            ? "Queueing Post..."
+                                            : `Confirm Schedule (${selectedAccountIds.length})`}
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
 
-            {/* SCHEDULED POST DETAILS MODAL */}
+            {/* POST DETAILS MODAL */}
             {selectedPost && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-                    <div className="w-full max-w-md rounded-2xl border border-neutral-800 bg-[#18181C] p-6 shadow-2xl">
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="post-detail-title"
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+                >
+                    <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
                         <div className="flex items-center justify-between">
                             <span
-                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE[selectedPost.status]
+                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_META[selectedPost.status].badgeClass
                                     }`}
                             >
-                                {selectedPost.status}
+                                <span
+                                    className={`h-1.5 w-1.5 rounded-full ${STATUS_META[selectedPost.status]
+                                            .dotClass
+                                        }`}
+                                />
+                                {STATUS_META[selectedPost.status].label}
                             </span>
                             <button
                                 type="button"
                                 onClick={() => setSelectedPost(null)}
-                                className="rounded-lg p-1 text-neutral-400 hover:bg-neutral-800 hover:text-white"
+                                aria-label="Close post details"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
                             >
-                                ✕
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    aria-hidden="true"
+                                    className="h-4 w-4"
+                                >
+                                    <line x1="18" y1="6" x2="6" y2="18" />
+                                    <line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
                             </button>
                         </div>
 
-                        <h3 className="mt-3 text-base font-bold text-white">
+                        <h3
+                            id="post-detail-title"
+                            className="mt-3 text-base font-bold text-white"
+                        >
                             {selectedPost.segmentTitle}
                         </h3>
-                        <p className="mt-1 text-xs text-neutral-400">
-                            Platform:{" "}
-                            <span className="font-medium text-neutral-200">
-                                {PLATFORM_META[selectedPost.platform].label} (
-                                {selectedPost.accountName})
-                            </span>
-                        </p>
-                        <p className="mt-0.5 text-xs text-neutral-400">
-                            Scheduled For:{" "}
-                            <span className="font-mono text-neutral-200">
-                                {format(
-                                    parseISO(selectedPost.scheduledFor),
-                                    "PPP 'at' p",
-                                )}
-                            </span>
-                        </p>
 
-                        <div className="mt-4 rounded-xl border border-neutral-800 bg-[#111114] p-3 text-xs leading-relaxed text-neutral-300">
-                            {selectedPost.caption || "No caption provided."}
+                        <div className="mt-3 space-y-1.5 rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-xs">
+                            <div className="flex items-center justify-between">
+                                <span className="text-slate-400">Channel</span>
+                                <span className="inline-flex items-center gap-1.5 font-semibold text-slate-100">
+                                    <span
+                                        className={
+                                            PLATFORM_META[selectedPost.platform]
+                                                .iconColor
+                                        }
+                                    >
+                                        <PlatformIcon
+                                            platform={selectedPost.platform}
+                                            className="h-3.5 w-3.5"
+                                        />
+                                    </span>
+                                    {PLATFORM_META[selectedPost.platform].label}{" "}
+                                    ({selectedPost.accountName})
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-slate-400">
+                                    Publish Slot
+                                </span>
+                                <span className="font-mono font-medium text-slate-200">
+                                    {format(
+                                        parseISO(selectedPost.scheduledFor),
+                                        "MMM d, yyyy · h:mm a",
+                                    )}
+                                </span>
+                            </div>
                         </div>
 
-                        <div className="mt-5 flex items-center justify-between">
+                        <div className="mt-4">
+                            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                Scheduled Caption
+                            </span>
+                            <div className="max-h-32 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs leading-relaxed text-slate-300">
+                                {selectedPost.caption || "No caption provided."}
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex items-center justify-between gap-3">
                             <button
                                 type="button"
                                 onClick={() =>
                                     handleCancelScheduledPost(selectedPost.id)
                                 }
-                                className="rounded-lg border border-red-500/40 bg-red-500/10 px-3.5 py-2 text-xs font-semibold text-red-300 hover:bg-red-500/20"
+                                className="min-h-[38px] rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/20"
                             >
-                                Cancel Scheduled Post
+                                Remove from Queue
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setSelectedPost(null)}
-                                className="rounded-lg bg-neutral-800 px-4 py-2 text-xs font-semibold text-neutral-200 hover:bg-neutral-700"
+                                className="min-h-[38px] rounded-xl bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700"
                             >
-                                Close
+                                Done
                             </button>
                         </div>
                     </div>
