@@ -495,8 +495,8 @@ function DroppableCalendarDayCell({
         <div
             ref={setNodeRef}
             className={`group relative flex min-h-[148px] flex-col justify-between border-b border-r border-slate-800/80 p-2.5 transition-colors duration-150 ${isCurrentMonth
-                    ? "bg-slate-950/60 hover:bg-slate-900/50"
-                    : "bg-slate-950/95 text-slate-600"
+                ? "bg-slate-950/60 hover:bg-slate-900/50"
+                : "bg-slate-950/95 text-slate-600"
                 } ${isOver
                     ? "bg-sky-500/10 ring-2 ring-inset ring-sky-400"
                     : today
@@ -510,10 +510,10 @@ function DroppableCalendarDayCell({
                     <div className="flex items-center gap-1.5">
                         <span
                             className={`inline-flex h-7 w-7 items-center justify-center rounded-lg text-xs font-semibold transition-colors ${today
-                                    ? "bg-sky-400 font-bold text-slate-950 shadow-sm shadow-sky-400/30"
-                                    : isCurrentMonth
-                                        ? "text-slate-200"
-                                        : "text-slate-600"
+                                ? "bg-sky-400 font-bold text-slate-950 shadow-sm shadow-sky-400/30"
+                                : isCurrentMonth
+                                    ? "text-slate-200"
+                                    : "text-slate-600"
                                 }`}
                         >
                             {format(day, "d")}
@@ -1049,8 +1049,8 @@ export default function CalendarClient({
                                 type="button"
                                 onClick={() => setPlatformFilter("ALL")}
                                 className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${platformFilter === "ALL"
-                                        ? "border-sky-400/60 bg-sky-400/15 text-sky-200"
-                                        : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                                    ? "border-sky-400/60 bg-sky-400/15 text-sky-200"
+                                    : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700 hover:text-slate-200"
                                     }`}
                             >
                                 All Channels
@@ -1073,8 +1073,8 @@ export default function CalendarClient({
                                             )
                                         }
                                         className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${active
-                                                ? meta.activeRing
-                                                : "border-slate-800 bg-slate-900/90 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                                            ? meta.activeRing
+                                            : "border-slate-800 bg-slate-900/90 text-slate-400 hover:border-slate-700 hover:text-slate-200"
                                             }`}
                                     >
                                         <span className={meta.iconColor}>
@@ -1339,8 +1339,8 @@ export default function CalendarClient({
                                                         )
                                                     }
                                                     className={`flex min-h-[42px] items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${isSelected
-                                                            ? meta.activeRing
-                                                            : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                                                        ? meta.activeRing
+                                                        : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"
                                                         }`}
                                                 >
                                                     <span
@@ -1424,9 +1424,9 @@ export default function CalendarClient({
                                                     )
                                                 }
                                                 className={`rounded-md border px-2 py-0.5 font-mono text-[11px] transition ${modalTimeString ===
-                                                        preset.time
-                                                        ? "border-sky-400/60 bg-sky-400/15 text-sky-300"
-                                                        : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                                                    preset.time
+                                                    ? "border-sky-400/60 bg-sky-400/15 text-sky-300"
+                                                    : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"
                                                     }`}
                                             >
                                                 {preset.display}
@@ -1503,8 +1503,7 @@ export default function CalendarClient({
                                     }`}
                             >
                                 <span
-                                    className={`h-1.5 w-1.5 rounded-full ${STATUS_META[selectedPost.status]
-                                            .dotClass
+                                    className={`h-1.5 w-1.5 rounded-full ${STATUS_META[selectedPost.status].dotClass
                                         }`}
                                 />
                                 {STATUS_META[selectedPost.status].label}
@@ -1513,7 +1512,7 @@ export default function CalendarClient({
                                 type="button"
                                 onClick={() => setSelectedPost(null)}
                                 aria-label="Close post details"
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
                             >
                                 <svg
                                     viewBox="0 0 24 24"
@@ -1536,14 +1535,36 @@ export default function CalendarClient({
                             {selectedPost.segmentTitle}
                         </h3>
 
-                        <div className="mt-3 space-y-1.5 rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-xs">
+                        {/* NEW: LIVE VIDEO LINK BLOCK */}
+                        {selectedPost.status === "PUBLISHED" && selectedPost.publishedUrl && (
+                            <div className="mt-4 flex flex-col gap-3 rounded-xl border border-sky-400/20 bg-sky-400/10 p-4">
+                                <div className="flex items-center gap-2">
+                                    <span className="flex h-2.5 w-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]" aria-hidden="true"></span>
+                                    <span className="text-sm font-medium text-sky-400">Successfully Published</span>
+                                </div>
+                                <a
+                                    href={selectedPost.publishedUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-sky-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-sky-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+                                >
+                                    View Live Video
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                        <polyline points="15 3 21 3 21 9"></polyline>
+                                        <line x1="10" y1="14" x2="21" y2="3"></line>
+                                    </svg>
+                                </a>
+                            </div>
+                        )}
+
+                        <div className="mt-4 space-y-1.5 rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-xs">
                             <div className="flex items-center justify-between">
                                 <span className="text-slate-400">Channel</span>
                                 <span className="inline-flex items-center gap-1.5 font-semibold text-slate-100">
                                     <span
                                         className={
-                                            PLATFORM_META[selectedPost.platform]
-                                                .iconColor
+                                            PLATFORM_META[selectedPost.platform].iconColor
                                         }
                                     >
                                         <PlatformIcon
@@ -1578,19 +1599,24 @@ export default function CalendarClient({
                         </div>
 
                         <div className="mt-6 flex items-center justify-between gap-3">
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    handleCancelScheduledPost(selectedPost.id)
-                                }
-                                className="min-h-[38px] rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/20"
-                            >
-                                Remove from Queue
-                            </button>
+                            {/* Hide cancel button if it's already published */}
+                            {selectedPost.status !== "PUBLISHED" ? (
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        handleCancelScheduledPost(selectedPost.id)
+                                    }
+                                    className="min-h-[38px] rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                                >
+                                    Remove from Queue
+                                </button>
+                            ) : (
+                                <div></div> /* Spacer to push 'Done' to the right */
+                            )}
                             <button
                                 type="button"
                                 onClick={() => setSelectedPost(null)}
-                                className="min-h-[38px] rounded-xl bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700"
+                                className="min-h-[38px] rounded-xl bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                             >
                                 Done
                             </button>
