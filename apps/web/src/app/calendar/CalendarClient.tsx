@@ -592,6 +592,7 @@ export default function CalendarClient({
     const [platformFilter, setPlatformFilter] = useState<
         SocialPlatformType | "ALL"
     >("ALL");
+    const [tiktokPublishType, setTiktokPublishType] = useState<"DIRECT" | "DRAFT">("DIRECT");
 
     // Active drag state
     const [activeDrag, setActiveDrag] = useState<DragPayload | null>(null);
@@ -796,6 +797,15 @@ export default function CalendarClient({
                     socialAccountIds: selectedAccountIds,
                     caption: modalCaption,
                     scheduledFor: scheduledIso,
+                    tiktokPublishType: selectedAccountIds.some((accountId) =>
+                        accounts.some(
+                            (account) =>
+                                account.id === accountId &&
+                                account.platform === "TIKTOK",
+                        ),
+                    )
+                        ? tiktokPublishType
+                        : "DIRECT",
                 }),
             });
 
@@ -1211,14 +1221,7 @@ export default function CalendarClient({
                                 aria-label="Close schedule modal"
                                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
                             >
-                                <svg
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    aria-hidden="true"
-                                    className="h-4 w-4"
-                                >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className="h-4 w-4">
                                     <line x1="18" y1="6" x2="6" y2="18" />
                                     <line x1="6" y1="6" x2="18" y2="18" />
                                 </svg>
@@ -1233,40 +1236,22 @@ export default function CalendarClient({
                             <div className="flex flex-col justify-between rounded-xl border border-slate-800 bg-slate-950 p-3">
                                 <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-slate-900">
                                     {modalClip.previewVideoUrl ? (
-                                        <video
-                                            src={modalClip.previewVideoUrl}
-                                            poster={
-                                                modalClip.thumbnailUrl ??
-                                                undefined
-                                            }
-                                            controls
-                                            preload="metadata"
-                                            className="h-full w-full object-cover"
-                                        />
+                                        <video src={modalClip.previewVideoUrl} poster={modalClip.thumbnailUrl ?? undefined} controls preload="metadata" className="h-full w-full object-cover" />
                                     ) : modalClip.thumbnailUrl ? (
-                                        <img
-                                            src={modalClip.thumbnailUrl}
-                                            alt={modalClip.title}
-                                            className="h-full w-full object-cover"
-                                        />
+                                        <img src={modalClip.thumbnailUrl} alt={modalClip.title} className="h-full w-full object-cover" />
                                     ) : (
                                         <div className="flex h-full flex-col items-center justify-center p-4 text-center">
                                             <span className="rounded bg-sky-500/15 px-2 py-1 text-[10px] font-bold text-sky-300">
                                                 {modalClip.thumbnailText}
                                             </span>
-                                            <p className="mt-2 text-xs text-slate-400">
-                                                {modalClip.title}
-                                            </p>
+                                            <p className="mt-2 text-xs text-slate-400">{modalClip.title}</p>
                                         </div>
                                     )}
                                 </div>
-
                                 <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
                                     <span>Duration</span>
                                     <span className="font-mono font-semibold text-slate-200">
-                                        {formatDurationBadge(
-                                            modalClip.durationSeconds,
-                                        )}
+                                        {formatDurationBadge(modalClip.durationSeconds)}
                                     </span>
                                 </div>
                             </div>
@@ -1275,36 +1260,22 @@ export default function CalendarClient({
                             <div className="space-y-4">
                                 {/* Clip Selector */}
                                 <div>
-                                    <label
-                                        htmlFor="schedule-clip-select"
-                                        className="mb-1.5 block text-xs font-semibold text-slate-300"
-                                    >
-                                        Active Clip
-                                    </label>
+                                    <label htmlFor="schedule-clip-select" className="mb-1.5 block text-xs font-semibold text-slate-300">Active Clip</label>
                                     <select
                                         id="schedule-clip-select"
                                         value={modalClip.id}
                                         onChange={(e) => {
-                                            const found = initialClips.find(
-                                                (c) => c.id === e.target.value,
-                                            );
+                                            const found = initialClips.find((c) => c.id === e.target.value);
                                             if (found) {
                                                 setModalClip(found);
-                                                setModalCaption(
-                                                    found.socialCaption ||
-                                                    found.title,
-                                                );
+                                                setModalCaption(found.socialCaption || found.title);
                                             }
                                         }}
                                         className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
                                     >
                                         {initialClips.map((c) => (
                                             <option key={c.id} value={c.id}>
-                                                {c.title} (
-                                                {formatDurationBadge(
-                                                    c.durationSeconds,
-                                                )}
-                                                )
+                                                {c.title} ({formatDurationBadge(c.durationSeconds)})
                                             </option>
                                         ))}
                                     </select>
@@ -1313,173 +1284,115 @@ export default function CalendarClient({
                                 {/* Target Channels */}
                                 <div>
                                     <div className="mb-1.5 flex items-center justify-between">
-                                        <span className="text-xs font-semibold text-slate-300">
-                                            Target Channels
-                                        </span>
-                                        <span className="text-[11px] text-slate-400">
-                                            {selectedAccountIds.length} selected
-                                        </span>
+                                        <span className="text-xs font-semibold text-slate-300">Target Channels</span>
+                                        <span className="text-[11px] text-slate-400">{selectedAccountIds.length} selected</span>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">
                                         {accounts.map((acc) => {
-                                            const isSelected =
-                                                selectedAccountIds.includes(
-                                                    acc.id,
-                                                );
-                                            const meta =
-                                                PLATFORM_META[acc.platform];
+                                            const isSelected = selectedAccountIds.includes(acc.id);
+                                            const meta = PLATFORM_META[acc.platform];
                                             return (
                                                 <button
                                                     key={acc.id}
                                                     type="button"
                                                     aria-pressed={isSelected}
-                                                    onClick={() =>
-                                                        toggleAccountSelection(
-                                                            acc.id,
-                                                        )
-                                                    }
-                                                    className={`flex min-h-[42px] items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${isSelected
-                                                        ? meta.activeRing
-                                                        : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-                                                        }`}
+                                                    onClick={() => toggleAccountSelection(acc.id)}
+                                                    className={`flex min-h-[42px] items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${isSelected ? meta.activeRing : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"}`}
                                                 >
-                                                    <span
-                                                        className={
-                                                            meta.iconColor
-                                                        }
-                                                    >
-                                                        <PlatformIcon
-                                                            platform={
-                                                                acc.platform
-                                                            }
-                                                            className="h-4 w-4"
-                                                        />
+                                                    <span className={meta.iconColor}>
+                                                        <PlatformIcon platform={acc.platform} className="h-4 w-4" />
                                                     </span>
-                                                    <span className="truncate">
-                                                        {acc.accountName}
-                                                    </span>
+                                                    <span className="truncate">{acc.accountName}</span>
                                                 </button>
                                             );
                                         })}
                                     </div>
-                                    {formError && (
-                                        <p
-                                            role="alert"
-                                            className="mt-1.5 text-xs font-medium text-rose-400"
-                                        >
-                                            {formError}
-                                        </p>
-                                    )}
+                                    {formError && <p role="alert" className="mt-1.5 text-xs font-medium text-rose-400">{formError}</p>}
                                 </div>
+
+                                {/* TIKTOK PUBLISH MODE TOGGLE (Only visible if TikTok is selected) */}
+                                {accounts.some((acc) => selectedAccountIds.includes(acc.id) && acc.platform.toUpperCase() === "TIKTOK") && (
+                                    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+                                        <label className="mb-2 block text-xs font-semibold text-slate-300">
+                                            TikTok Publishing Mode
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setTiktokPublishType("DIRECT")}
+                                                className={`flex items-center justify-center rounded-lg border px-3 py-2 text-[11px] font-medium transition ${tiktokPublishType === "DIRECT"
+                                                        ? "border-sky-500 bg-sky-500/10 text-sky-400"
+                                                        : "border-slate-700 bg-slate-950 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                                                    }`}
+                                            >
+                                                Direct Post
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setTiktokPublishType("DRAFT")}
+                                                className={`flex items-center justify-center rounded-lg border px-3 py-2 text-[11px] font-medium transition ${tiktokPublishType === "DRAFT"
+                                                        ? "border-sky-500 bg-sky-500/10 text-sky-400"
+                                                        : "border-slate-700 bg-slate-950 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                                                    }`}
+                                            >
+                                                Send to Drafts
+                                            </button>
+                                        </div>
+                                        {tiktokPublishType === "DRAFT" && (
+                                            <p className="mt-2 text-[10px] leading-relaxed text-amber-400/90">
+                                                Note: TikTok allows only 5 pending draft uploads per creator in 24 hours. Captions are disabled for drafts; after uploading, open TikTok <strong>Inbox &rarr; System Notifications</strong> to edit and post.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* Date & Time + Quick Presets */}
                                 <div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <label className="block">
-                                            <span className="mb-1.5 block text-xs font-semibold text-slate-300">
-                                                Publish Date
-                                            </span>
-                                            <input
-                                                type="date"
-                                                required
-                                                value={modalDateString}
-                                                onChange={(e) =>
-                                                    setModalDateString(
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
-                                            />
+                                            <span className="mb-1.5 block text-xs font-semibold text-slate-300">Publish Date</span>
+                                            <input type="date" required value={modalDateString} onChange={(e) => setModalDateString(e.target.value)} className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400" />
                                         </label>
                                         <label className="block">
-                                            <span className="mb-1.5 block text-xs font-semibold text-slate-300">
-                                                Publish Time
-                                            </span>
-                                            <input
-                                                type="time"
-                                                required
-                                                value={modalTimeString}
-                                                onChange={(e) =>
-                                                    setModalTimeString(
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
-                                            />
+                                            <span className="mb-1.5 block text-xs font-semibold text-slate-300">Publish Time</span>
+                                            <input type="time" required value={modalTimeString} onChange={(e) => setModalTimeString(e.target.value)} className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400" />
                                         </label>
                                     </div>
-
-                                    {/* Optimal Time Presets */}
                                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                        <span className="mr-1 text-[11px] text-slate-400">
-                                            Quick slots:
-                                        </span>
+                                        <span className="mr-1 text-[11px] text-slate-400">Quick slots:</span>
                                         {QUICK_TIME_PRESETS.map((preset) => (
-                                            <button
-                                                key={preset.time}
-                                                type="button"
-                                                onClick={() =>
-                                                    setModalTimeString(
-                                                        preset.time,
-                                                    )
-                                                }
-                                                className={`rounded-md border px-2 py-0.5 font-mono text-[11px] transition ${modalTimeString ===
-                                                    preset.time
-                                                    ? "border-sky-400/60 bg-sky-400/15 text-sky-300"
-                                                    : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-                                                    }`}
-                                            >
+                                            <button key={preset.time} type="button" onClick={() => setModalTimeString(preset.time)} className={`rounded-md border px-2 py-0.5 font-mono text-[11px] transition ${modalTimeString === preset.time ? "border-sky-400/60 bg-sky-400/15 text-sky-300" : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"}`}>
                                                 {preset.display}
                                             </button>
                                         ))}
                                     </div>
                                 </div>
 
-                                {/* Caption & Character Counter */}
+                                {/* Caption (Disabled if DRAFT is selected) */}
                                 <div>
                                     <div className="mb-1.5 flex items-center justify-between">
-                                        <label
-                                            htmlFor="schedule-caption-input"
-                                            className="text-xs font-semibold text-slate-300"
-                                        >
-                                            Caption & Hashtags
-                                        </label>
-                                        <span className="font-mono text-[11px] text-slate-400">
-                                            {modalCaption.length} / 2200
-                                        </span>
+                                        <label htmlFor="schedule-caption-input" className="text-xs font-semibold text-slate-300">Caption & Hashtags</label>
+                                        <span className="font-mono text-[11px] text-slate-400">{modalCaption.length} / 2200</span>
                                     </div>
                                     <textarea
                                         id="schedule-caption-input"
                                         rows={3}
                                         maxLength={2200}
                                         value={modalCaption}
-                                        onChange={(e) =>
-                                            setModalCaption(e.target.value)
-                                        }
+                                        disabled={tiktokPublishType === "DRAFT"}
+                                        onChange={(e) => setModalCaption(e.target.value)}
                                         placeholder="Write a hook and relevant hashtags (#shorts #reels #tiktok)..."
-                                        className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs leading-relaxed text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                        className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs leading-relaxed text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400 disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
                                 </div>
 
                                 {/* Submit Actions */}
                                 <div className="flex items-center justify-end gap-2.5 border-t border-slate-800 pt-4">
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            setIsScheduleModalOpen(false)
-                                        }
-                                        className="min-h-[40px] rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white"
-                                    >
+                                    <button type="button" onClick={() => setIsScheduleModalOpen(false)} className="min-h-[40px] rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white">
                                         Cancel
                                     </button>
-                                    <button
-                                        type="submit"
-                                        disabled={isSubmitting}
-                                        className="min-h-[40px] rounded-xl bg-sky-400 px-5 py-2 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-sky-300 disabled:opacity-50"
-                                    >
-                                        {isSubmitting
-                                            ? "Queueing Post..."
-                                            : `Confirm Schedule (${selectedAccountIds.length})`}
+                                    <button type="submit" disabled={isSubmitting} className="min-h-[40px] rounded-xl bg-sky-400 px-5 py-2 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-sky-300 disabled:opacity-50">
+                                        {isSubmitting ? "Queueing Post..." : `Confirm Schedule (${selectedAccountIds.length})`}
                                     </button>
                                 </div>
                             </div>
