@@ -404,6 +404,26 @@ function sliceVideo(
     });
 }
 
+function extractThumbnail(
+    inputPath: string,
+    outputPath: string,
+    timeOffsetSeconds: number = 1,
+): Promise<void> {
+    return new Promise((resolve, reject) => {
+        ffmpeg(inputPath)
+            // Seek to 1 second in to avoid black starting frames, 
+            // or 0 if the clip is very short
+            .seekInput(timeOffsetSeconds)
+            .frames(1)
+            .outputOptions([
+                "-q:v", "2", // High quality JPEG
+            ])
+            .on("end", () => resolve())
+            .on("error", (err) => reject(new Error(`Thumbnail extraction failed: ${err.message}`)))
+            .save(outputPath);
+    });
+}
+
 async function uploadS3File(
     localPath: string,
     s3Key: string,
@@ -567,7 +587,7 @@ export async function processVideo(
             );
             const { object: structuredData }: { object: StructuredData } =
                 await generateObject({
-                    model: google("gemini-3.1-flash-lite"),
+                    model: google("gemini-3.5-flash-lite"),
                     schema: structuredDataSchema,
                     prompt: buildSegmentationPrompt(
                         transcript,
@@ -582,6 +602,7 @@ export async function processVideo(
             clipS3Key: string;
             captionedClipS3Key: string | null;
             subtitleS3Key: string | null;
+            thumbnailS3Key: string | null; // <-- NEW
             startTime: string;
             endTime: string;
             title: string;
@@ -598,7 +619,14 @@ export async function processVideo(
                 LOCAL_TMP_DIR,
                 `${job.id}-segment-${index}.mp4`,
             ).replace(/\\/g, "/");
-            temporaryFilesToCleanup.push(rawClipPath);
+
+            // NEW: Setup thumbnail paths
+            const thumbnailPath = join(
+                LOCAL_TMP_DIR,
+                `${job.id}-segment-${index}-thumb.jpg`,
+            ).replace(/\\/g, "/");
+
+            temporaryFilesToCleanup.push(rawClipPath, thumbnailPath);
 
             await sliceVideo(
                 videoPath,
@@ -609,8 +637,14 @@ export async function processVideo(
             );
 
             const rawClipS3Key = `processed-videos/${job.id}-segment-${index}.mp4`;
+            const thumbnailS3Key = `processed-thumbnails/${job.id}-segment-${index}.jpg`; // <-- NEW
             let captionedClipS3Key: string | null = null;
             let subtitleS3Key: string | null = null;
+
+            // NEW: Generate Thumbnail
+            // We use Math.min to ensure we don't seek past the video's actual duration
+            const seekTime = Math.min(1.0, duration / 2);
+            await extractThumbnail(rawClipPath, thumbnailPath, seekTime);
 
             // 1. Generate and Burn Captions
             if (
@@ -652,15 +686,17 @@ export async function processVideo(
                 }
             }
 
-            // 2. Upload Raw Clip
+            // 2. Upload Raw Clip & Thumbnail
             await uploadS3File(rawClipPath, rawClipS3Key, "video/mp4");
+            await uploadS3File(thumbnailPath, thumbnailS3Key, "image/jpeg"); // <-- NEW
 
-            // 3. Queue DB Payload (Keeping thumbnailText for later generation)
+            // 3. Queue DB Payload
             segmentDataForDb.push({
                 videoId: jobData.videoId,
                 clipS3Key: rawClipS3Key,
                 captionedClipS3Key,
                 subtitleS3Key,
+                thumbnailS3Key, // <-- NEW
                 startTime: String(segment.start_time),
                 endTime: String(segment.end_time),
                 title: segment.segment_title,
