@@ -103,6 +103,7 @@ export async function PATCH(request: Request, context: RouteContext) {
                 PUBLISH_SOCIAL_POST_JOB,
                 {
                     scheduledPostId: existingPost.id,
+                    tiktokPublishType: existingPost.tiktokPublishType,
                 },
                 {
                     delay: delayMs,

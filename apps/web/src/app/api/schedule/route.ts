@@ -16,6 +16,7 @@ const schedulePostRequestSchema = z.object({
     segmentId: z.string().uuid(),
     socialAccountIds: z.array(z.string().min(1)).min(1),
     caption: z.string().trim().max(2200).default(""),
+    tiktokPublishType: z.enum(["DIRECT", "DRAFT"]).default("DIRECT"),
     scheduledFor: z
         .string()
         .refine((val) => !Number.isNaN(new Date(val).getTime()), {
@@ -176,7 +177,13 @@ export async function POST(request: Request) {
         );
     }
 
-    const { segmentId, socialAccountIds, caption, scheduledFor } = parsed.data;
+    const {
+        segmentId,
+        socialAccountIds,
+        caption,
+        scheduledFor,
+        tiktokPublishType,
+    } = parsed.data;
     const scheduledDate = new Date(scheduledFor);
 
     try {
@@ -230,6 +237,7 @@ export async function POST(request: Request) {
                         `${segment.title} #shorts`,
                     scheduledFor: scheduledDate,
                     status: "SCHEDULED",
+                    tiktokPublishType,
                 },
                 include: {
                     videoSegment: {
@@ -253,6 +261,7 @@ export async function POST(request: Request) {
                 PUBLISH_SOCIAL_POST_JOB,
                 {
                     scheduledPostId: createdRecord.id,
+                    tiktokPublishType: createdRecord.tiktokPublishType,
                 },
                 {
                     delay: delayMs,

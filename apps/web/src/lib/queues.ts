@@ -30,6 +30,7 @@ export interface CreateThumbnailJobData {
 
 export interface SocialPublishingJobData {
     scheduledPostId: string;
+    tiktokPublishType?: "DIRECT" | "DRAFT";
 }
 
 function getRedisConnectionConfig() {

@@ -31,6 +31,7 @@ const s3 = new S3Client({
 
 const socialPublishingJobSchema = z.object({
     scheduledPostId: z.string().uuid(),
+    tiktokPublishType: z.enum(["DIRECT", "DRAFT"]).optional(),
 });
 
 export type SocialPublishingJobData = z.infer<typeof socialPublishingJobSchema>;
@@ -59,6 +60,7 @@ interface PlatformPublishContext {
     signedVideoUrl: string;
     title: string;
     caption: string;
+    tiktokPublishType: "DIRECT" | "DRAFT";
 }
 
 interface PlatformPublishResult {
@@ -281,12 +283,18 @@ async function simulateDryRunPublish(
 async function publishToTikTok(
     ctx: PlatformPublishContext,
 ): Promise<PlatformPublishResult> {
-    const response = await axios.post<{
-        data?: { publish_id?: string };
-        error?: { code?: string; message?: string };
-    }>(
-        "https://open.tiktokapis.com/v2/post/publish/video/init/",
-        {
+    const isDraft = ctx.tiktokPublishType === "DRAFT";
+    const initEndpoint = isDraft
+        ? "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/"
+        : "https://open.tiktokapis.com/v2/post/publish/video/init/";
+    const requestBody = isDraft
+        ? {
+            source_info: {
+                source: "PULL_FROM_URL" as const,
+                video_url: ctx.signedVideoUrl,
+            },
+        }
+        : {
             post_info: {
                 title: ctx.caption.slice(0, 2200),
                 privacy_level: "SELF_ONLY",
@@ -295,18 +303,22 @@ async function publishToTikTok(
                 disable_stitch: false,
             },
             source_info: {
-                source: "PULL_FROM_URL",
+                source: "PULL_FROM_URL" as const,
                 video_url: ctx.signedVideoUrl,
             },
-        },
-        {
+        };
+
+    const response = await axios.post<{
+        data?: { publish_id?: string };
+        error?: { code?: string; message?: string };
+    }>(initEndpoint, requestBody, {
             headers: {
                 Authorization: `Bearer ${ctx.accessToken}`,
                 "Content-Type": "application/json; charset=UTF-8",
             },
             timeout: 60_000,
         },
-    );
+    });
 
     const publishId = response.data?.data?.publish_id;
     if (!publishId) {
@@ -315,6 +327,10 @@ async function publishToTikTok(
             "TikTok API did not return a publish_id.";
         throw new Error(`TikTok publish failed: ${errMsg}`);
     }
+
+    console.log(
+        `[Social Publisher] Initialized TikTok ${isDraft ? "DRAFT" : "DIRECT"} post with publish_id: ${publishId}`,
+    );
 
     return {
         externalPostId: publishId,
@@ -634,7 +650,8 @@ export async function processSocialPublish(
         );
     }
 
-    const { scheduledPostId } = socialPublishingJobSchema.parse(job.data);
+    const { scheduledPostId, tiktokPublishType: jobPublishType } =
+        socialPublishingJobSchema.parse(job.data);
 
     const scheduledPost = await prisma.scheduledPost.findUnique({
         where: { id: scheduledPostId },
@@ -732,6 +749,8 @@ export async function processSocialPublish(
                 scheduledPost.caption ||
                 scheduledPost.videoSegment.socialCaption ||
                 scheduledPost.videoSegment.title,
+            tiktokPublishType:
+                scheduledPost.tiktokPublishType ?? jobPublishType ?? "DIRECT",
         });
 
         await prisma.scheduledPost.update({
