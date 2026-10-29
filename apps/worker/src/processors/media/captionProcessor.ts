@@ -1,7 +1,47 @@
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { NodeHttpHandler } from "@smithy/node-http-handler";
 import type { Job } from "bullmq";
-import fs from "node:fs/promises";
 import ffmpeg from "fluent-ffmpeg";
+import { createReadStream } from "node:fs";
+import fs from "node:fs/promises";
+import { join } from "node:path";
 import { z } from "zod";
+import { prisma } from "../../../../../packages/database/index.js";
+import { env } from "../../config/env.js";
+
+const s3Bucket = env.S3_BUCKET_NAME;
+const LOCAL_TMP_DIR = join(process.cwd(), ".tmp");
+
+const s3 = new S3Client({
+    ...(env.AWS_REGION ? { region: env.AWS_REGION } : {}),
+    maxAttempts: 5,
+    requestHandler: new NodeHttpHandler({
+        connectionTimeout: 30_000,
+        socketTimeout: 10 * 60 * 1000,
+    }),
+});
+
+async function uploadS3File(
+    localPath: string,
+    s3Key: string,
+    contentType: string,
+): Promise<void> {
+    if (!s3Bucket) {
+        throw new Error("S3_BUCKET_NAME must be configured.");
+    }
+
+    const fileStats = await fs.stat(localPath);
+
+    await s3.send(
+        new PutObjectCommand({
+            Bucket: s3Bucket,
+            Key: s3Key,
+            Body: createReadStream(localPath),
+            ContentLength: fileStats.size,
+            ContentType: contentType,
+        }),
+    );
+}
 
 export const wordTimestampSchema = z.object({
     word: z.string(),
@@ -17,6 +57,7 @@ export interface GenerateCaptionsOptions {
     inputClipPath: string;
     outputClipPath: string;
     outputAssPath: string;
+    outputThumbnailPath?: string;
     words: WordTimestamp[];
     segmentStartTime: number;
     segmentEndTime: number;
@@ -27,6 +68,28 @@ export interface GenerateCaptionsOptions {
 export interface GenerateCaptionsResult {
     captionedClipPath: string | null;
     assFilePath: string | null;
+    thumbnailFilePath: string | null;
+}
+
+/**
+ * Extracts a single high-quality JPEG thumbnail frame from a video clip
+ */
+export function extractThumbnailFromClip(
+    inputPath: string,
+    outputPath: string,
+    timeOffsetSeconds: number = 1,
+): Promise<void> {
+    return new Promise((resolve, reject) => {
+        ffmpeg(inputPath)
+            .seekInput(Math.max(0, timeOffsetSeconds))
+            .frames(1)
+            .outputOptions(["-q:v", "2"])
+            .on("end", () => resolve())
+            .on("error", (err) =>
+                reject(new Error(`Thumbnail extraction failed: ${err.message}`)),
+            )
+            .save(outputPath);
+    });
 }
 
 /**
@@ -118,16 +181,10 @@ export function buildAssSubtitleContent(
 
     // ASS colors use &HAABBGGRR (BGR order!):
     // Yellow: &H0000FFFF | White: &H00FFFFFF | Black: &H00000000
-    // Inside captionProcessor.ts -> buildAssSubtitleContent()
-
     const isMinimal = captionStyle === "MINIMAL";
-
-    // For this style, we'll keep the text white and use yellow for HIGHLIGHT/KARAOKE active words
     const primaryColor = captionStyle === "KARAOKE" ? "&H0000FFFF" : "&H00FFFFFF";
     const secondaryColor = "&H00FFFFFF";
-
-    // Increase the outline for that thick, blocky look
-    const outlineWidth = isMinimal ? 3 : 10; // Bumped up to 10 for a heavy border
+    const outlineWidth = isMinimal ? 3 : 10;
 
     const header = `[Script Info]
 ScriptType: v4.00+
@@ -165,7 +222,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
                 `Dialogue: 0,${formatAssTime(phraseStart)},${formatAssTime(phraseEnd)},Default,,0,0,0,,${karaokeTokens.join(" ")}`,
             );
         } else if (captionStyle === "HIGHLIGHT") {
-            // Render one event per active word so the active word pops in Yellow and scales slightly
             for (let idx = 0; idx < phrase.length; idx++) {
                 const activeWord = phrase[idx];
                 const nextWord = phrase[idx + 1];
@@ -184,7 +240,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
                 );
             }
         } else {
-            // MINIMAL style
             const text = phrase.map((w) => escapeAssText(w.word)).join(" ");
             dialogueLines.push(
                 `Dialogue: 0,${formatAssTime(phraseStart)},${formatAssTime(phraseEnd)},Default,,0,0,0,,${text}`,
@@ -196,7 +251,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
 }
 
 /**
- * Generates the .ass file and burns captions into the video clip using FFmpeg
+ * Generates the .ass file, burns captions into the video clip using FFmpeg,
+ * and optionally extracts a thumbnail frame.
  */
 export async function generateAndBurnCaptions(
     options: GenerateCaptionsOptions,
@@ -205,6 +261,7 @@ export async function generateAndBurnCaptions(
         inputClipPath,
         outputClipPath,
         outputAssPath,
+        outputThumbnailPath,
         words,
         segmentStartTime,
         segmentEndTime,
@@ -212,9 +269,17 @@ export async function generateAndBurnCaptions(
         aspectRatio,
     } = options;
 
-    // 1. Respect "NONE" immediately
+    const duration = Math.max(0.1, segmentEndTime - segmentStartTime);
+    const seekTime = Math.min(1.0, duration / 2);
+
+    // 1. Respect "NONE" immediately (still extract thumbnail from inputClipPath if requested)
     if (captionStyle === "NONE" || words.length === 0) {
-        return { captionedClipPath: null, assFilePath: null };
+        let thumbnailFilePath: string | null = null;
+        if (outputThumbnailPath) {
+            await extractThumbnailFromClip(inputClipPath, outputThumbnailPath, seekTime);
+            thumbnailFilePath = outputThumbnailPath;
+        }
+        return { captionedClipPath: null, assFilePath: null, thumbnailFilePath };
     }
 
     // 2. Generate .ass subtitle file
@@ -249,9 +314,17 @@ export async function generateAndBurnCaptions(
             .run();
     });
 
+    // 4. Extract thumbnail from the captioned video if requested
+    let thumbnailFilePath: string | null = null;
+    if (outputThumbnailPath) {
+        await extractThumbnailFromClip(sanitizedOutput, outputThumbnailPath, seekTime);
+        thumbnailFilePath = outputThumbnailPath;
+    }
+
     return {
         captionedClipPath: outputClipPath,
         assFilePath: outputAssPath,
+        thumbnailFilePath,
     };
 }
 
@@ -262,6 +335,7 @@ export const captionJobSchema = z.object({
     inputClipPath: z.string().min(1),
     outputClipPath: z.string().min(1),
     outputAssPath: z.string().min(1),
+    outputThumbnailPath: z.string().min(1).optional(),
     words: z.array(wordTimestampSchema),
     segmentStartTime: z.number(),
     segmentEndTime: z.number(),
@@ -277,19 +351,16 @@ export type CaptionProcessingJobData = z.infer<typeof captionJobSchema>;
 export async function processCaption(job: Job<CaptionProcessingJobData>) {
     const payload = captionJobSchema.parse(job.data);
 
-    if (payload.captionStyle === "NONE") {
-        return {
-            segmentId: payload.segmentId,
-            captionedClipPath: null,
-            assFilePath: null,
-            skipped: true,
-        };
-    }
+    await fs.mkdir(LOCAL_TMP_DIR, { recursive: true });
+    const thumbnailPath =
+        payload.outputThumbnailPath ??
+        join(LOCAL_TMP_DIR, `${job.id ?? payload.segmentId}-thumb.jpg`).replace(/\\/g, "/");
 
     const result = await generateAndBurnCaptions({
         inputClipPath: payload.inputClipPath,
         outputClipPath: payload.outputClipPath,
         outputAssPath: payload.outputAssPath,
+        outputThumbnailPath: thumbnailPath,
         words: payload.words,
         segmentStartTime: payload.segmentStartTime,
         segmentEndTime: payload.segmentEndTime,
@@ -297,9 +368,41 @@ export async function processCaption(job: Job<CaptionProcessingJobData>) {
         aspectRatio: payload.aspectRatio,
     });
 
+    let captionedClipS3Key: string | null = null;
+    let subtitleS3Key: string | null = null;
+    let thumbnailS3Key: string | null = null;
+
+    if (result.captionedClipPath) {
+        captionedClipS3Key = `processed-videos/${payload.segmentId}-captioned.mp4`;
+        await uploadS3File(result.captionedClipPath, captionedClipS3Key, "video/mp4");
+    }
+
+    if (result.assFilePath) {
+        subtitleS3Key = `processed-videos/${payload.segmentId}.ass`;
+        await uploadS3File(result.assFilePath, subtitleS3Key, "text/plain");
+    }
+
+    if (result.thumbnailFilePath) {
+        thumbnailS3Key = `processed-thumbnails/${payload.segmentId}.jpg`;
+        await uploadS3File(result.thumbnailFilePath, thumbnailS3Key, "image/jpeg");
+        await fs.rm(result.thumbnailFilePath, { force: true }).catch(() => undefined);
+    }
+
+    await prisma.videoSegment.update({
+        where: { id: payload.segmentId },
+        data: {
+            ...(captionedClipS3Key ? { captionedClipS3Key } : {}),
+            ...(subtitleS3Key ? { subtitleS3Key } : {}),
+            ...(thumbnailS3Key ? { thumbnailS3Key } : {}),
+        },
+    });
+
     return {
         segmentId: payload.segmentId,
         ...result,
-        skipped: false,
+        captionedClipS3Key,
+        subtitleS3Key,
+        thumbnailS3Key,
+        skipped: payload.captionStyle === "NONE",
     };
 }
