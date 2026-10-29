@@ -1,25 +1,31 @@
 import { Worker } from "bullmq";
-
 import { redis } from "../config/redis.js";
 import { queueNames } from "../constants/queues.js";
 import {
     processSocialPublish,
+    type SocialPublishingJobData,
 } from "../processors/publishing/socialPublishProcessor.js";
-import type { SocialPublishJobData } from "../queues/publishingQueue.js";
 
-export const publishingWorker = new Worker<SocialPublishJobData>(
-    queueNames.publishing,
-    processSocialPublish,
-    { connection: redis, concurrency: 25 },
+export const publishingWorker = new Worker<SocialPublishingJobData>(
+    queueNames.socialPublishing,
+    async (job) => {
+        return processSocialPublish(job);
+    },
+    {
+        connection: redis,
+        concurrency: 3,
+    },
 );
 
 publishingWorker.on("completed", (job) => {
-    console.log(`Publishing job ${job.id} completed.`);
+    console.log(
+        `Social publishing job ${job.id} (${job.name}) completed successfully.`,
+    );
 });
 
 publishingWorker.on("failed", (job, error) => {
     console.error(
-        `Publishing job ${job?.id ?? "unknown"} failed.`,
-        error.stack ?? error.message,
+        `Social publishing job ${job?.id ?? "unknown"} (${job?.name ?? "unknown"}) failed:`,
+        error,
     );
 });
