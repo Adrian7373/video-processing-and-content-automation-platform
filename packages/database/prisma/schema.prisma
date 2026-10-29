@@ -105,6 +105,7 @@ model ScheduledPost {
   errorMessage    String?       @db.Text
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+  publishedAt     DateTime?
 
   videoSegment  VideoSegment  @relation(fields: [videoSegmentId], references: [id], onDelete: Cascade)
   socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
