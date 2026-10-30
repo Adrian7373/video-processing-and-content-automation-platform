@@ -19,7 +19,7 @@ import axios from "axios";
 import FormData from "form-data";
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
-import { prisma } from "../../../../../packages/database/index.js";
+import { prisma, CreditReason } from "../../../../../packages/database/index.js";
 import { env } from "../../config/env.js";
 import { jobNames } from "../../constants/queues.js";
 
@@ -724,19 +724,33 @@ export async function processVideo(
 
         if (attemptsExhausted) {
             try {
-                await prisma.video.update({
-                    where: { id: jobData.videoId },
-                    data: {
-                        status: "FAILED",
-                        errorMessage:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                    },
-                });
+                await prisma.$transaction([
+                    prisma.video.update({
+                        where: { id: jobData.videoId },
+                        data: {
+                            status: "FAILED",
+                            errorMessage:
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                        },
+                    }),
+                    prisma.user.update({
+                        where: { id: jobData.userId },
+                        data: { credits: { increment: 1 } },
+                    }),
+                    prisma.creditTransaction.create({
+                        data: {
+                            userId: jobData.userId,
+                            amount: 1,
+                            reason: CreditReason.REFUND_FAILED_JOB,
+                            videoId: jobData.videoId,
+                        },
+                    }),
+                ]);
             } catch (statusError) {
                 console.error(
-                    `Failed to mark video ${jobData.videoId} as FAILED.`,
+                    `Failed to mark video ${jobData.videoId} as FAILED and refund credit.`,
                     statusError,
                 );
             }
