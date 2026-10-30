@@ -3,6 +3,7 @@ import {
     PrismaClient,
     AspectRatio,
     CaptionStyle,
+    CreditReason,
     PublishStatus,
     SocialPlatform,
     VideoStatus,
@@ -11,6 +12,7 @@ import {
 export {
     AspectRatio,
     CaptionStyle,
+    CreditReason,
     PublishStatus,
     SocialPlatform,
     VideoStatus,
