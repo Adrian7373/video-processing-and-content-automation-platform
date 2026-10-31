@@ -4,10 +4,8 @@ import { getOrCreateActor } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export const OAUTH_STATE_COOKIE = "vr_oauth_state";
-export const OAUTH_RETURN_COOKIE = "vr_oauth_return_to";
-
-type RouteContext = { params: Promise<{ platform: string }> };
+const OAUTH_STATE_COOKIE = "vr_oauth_state";
+const OAUTH_RETURN_COOKIE = "vr_oauth_return_to";
 
 function getBaseUrl(request: Request): string {
     if (process.env.NEXT_PUBLIC_APP_URL) {
@@ -17,14 +15,15 @@ function getBaseUrl(request: Request): string {
     return `${url.protocol}//${url.host}`;
 }
 
-export async function GET(request: Request, context: RouteContext) {
-    const { platform } = await context.params;
-    const normalizedPlatform = platform.toLowerCase();
+export async function GET(
+    request: Request,
+    { params }: { params: Promise<{ platform: string }> },
+) {
+    const { platform } = await params;
     const requestUrl = new URL(request.url);
     const returnTo = requestUrl.searchParams.get("returnTo") || "/channels";
     const baseUrl = getBaseUrl(request);
 
-    // Ensure the user or anonymous actor exists before starting OAuth
     await getOrCreateActor();
 
     const state = crypto.randomUUID();
@@ -35,7 +34,7 @@ export async function GET(request: Request, context: RouteContext) {
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
         path: "/",
-        maxAge: 60 * 10, // 10 minutes
+        maxAge: 60 * 10,
     });
 
     cookieStore.set(OAUTH_RETURN_COOKIE, returnTo, {
@@ -46,14 +45,36 @@ export async function GET(request: Request, context: RouteContext) {
         maxAge: 60 * 10,
     });
 
-    if (normalizedPlatform === "youtube") {
-        const clientId =
-            process.env.YOUTUBE_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID;
+    // --- TIKTOK OAUTH ---
+    if (platform === "tiktok") {
+        const clientKey = process.env.TIKTOK_CLIENT_KEY;
+        if (!clientKey) {
+            return NextResponse.redirect(
+                `${baseUrl}/channels?error=${encodeURIComponent(
+                    "Missing TIKTOK_CLIENT_KEY in environment variables.",
+                )}`,
+            );
+        }
 
+        const redirectUri = `${baseUrl}/api/integrations/tiktok/callback`;
+        const authUrl = new URL("https://www.tiktok.com/v2/auth/authorize/");
+
+        authUrl.searchParams.set("client_key", clientKey);
+        authUrl.searchParams.set("response_type", "code");
+        authUrl.searchParams.set("scope", "user.info.basic,video.publish");
+        authUrl.searchParams.set("redirect_uri", redirectUri);
+        authUrl.searchParams.set("state", state);
+
+        return NextResponse.redirect(authUrl.toString());
+    }
+
+    // --- YOUTUBE OAUTH ---
+    if (platform === "youtube") {
+        const clientId = process.env.GOOGLE_CLIENT_ID;
         if (!clientId) {
             return NextResponse.redirect(
                 `${baseUrl}/channels?error=${encodeURIComponent(
-                    "Missing YOUTUBE_CLIENT_ID or GOOGLE_CLIENT_ID in environment variables.",
+                    "Missing GOOGLE_CLIENT_ID in environment variables.",
                 )}`,
             );
         }
@@ -64,6 +85,8 @@ export async function GET(request: Request, context: RouteContext) {
         authUrl.searchParams.set("client_id", clientId);
         authUrl.searchParams.set("redirect_uri", redirectUri);
         authUrl.searchParams.set("response_type", "code");
+        authUrl.searchParams.set("access_type", "offline");
+        authUrl.searchParams.set("prompt", "consent");
         authUrl.searchParams.set(
             "scope",
             [
@@ -71,9 +94,6 @@ export async function GET(request: Request, context: RouteContext) {
                 "https://www.googleapis.com/auth/youtube.readonly",
             ].join(" "),
         );
-        authUrl.searchParams.set("access_type", "offline");
-        authUrl.searchParams.set("prompt", "consent");
-        authUrl.searchParams.set("include_granted_scopes", "true");
         authUrl.searchParams.set("state", state);
 
         return NextResponse.redirect(authUrl.toString());
@@ -81,7 +101,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     return NextResponse.redirect(
         `${baseUrl}/channels?error=${encodeURIComponent(
-            `OAuth provider "${platform}" is not configured yet.`,
+            `Unsupported platform: ${platform}`,
         )}`,
     );
 }
