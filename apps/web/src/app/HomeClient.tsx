@@ -78,7 +78,7 @@ export default function HomeClient({
     // STATE 2: HAS PROJECTS
     // Strict 2-column layout preventing the Uploader from overlapping the grid
     return (
-        <div className="min-h-full w-full bg-[#0A0D14] p-6 lg:p-8 xl:p-10">
+        <div className="min-h-full w-full bg-slate-950 p-6 lg:p-8 xl:p-10">
             {/* max-w-[1400px] ensures it doesn't stretch awkwardly on ultra-wide screens */}
             <div className="mx-auto max-w-[1400px]">
 
@@ -138,8 +138,8 @@ export default function HomeClient({
                                                 }
                                             }}
                                             className={`relative aspect-video w-full overflow-hidden rounded-2xl border border-slate-800/90 bg-[#0E111A] transition duration-200 ${isCompleted
-                                                ? "cursor-pointer hover:border-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-                                                : "cursor-default"
+                                                    ? "cursor-pointer hover:border-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                                                    : "cursor-default"
                                                 }`}
                                         >
                                             {video.thumbnailUrl ? (

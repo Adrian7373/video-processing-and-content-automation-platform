@@ -39,7 +39,7 @@ const PLATFORMS: readonly PlatformConfig[] = [
         name: "TikTok",
         description:
             "Direct video publishing to TikTok creator accounts via TikTok Content Posting API.",
-        available: false,
+        available: true,
         accentBorder: "hover:border-white/50",
         badgeBg: "bg-cyan-400/10 text-cyan-300 border-cyan-400/30",
         iconColor: "text-cyan-300",
