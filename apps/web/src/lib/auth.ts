@@ -5,7 +5,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { prisma, CreditReason } from "@/../../packages/database/index";
+import { prisma, CreditReason } from "../../../../packages/database/index";
 
 export const GUEST_COOKIE_NAME = "vr_guest_user_id";
 export const INITIAL_TRIAL_CREDITS = 3;

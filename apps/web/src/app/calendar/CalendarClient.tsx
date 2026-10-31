@@ -284,11 +284,11 @@ function DraggableClipCard({
             {...listeners}
             {...attributes}
             aria-label={`Draggable clip: ${clip.title}`}
-            className={`group relative flex cursor-grab gap-3.5 rounded-xl border border-slate-800/90 bg-slate-900/90 p-3 shadow-sm transition-all duration-150 hover:border-slate-700 hover:bg-slate-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 active:cursor-grabbing ${isDragging ? "scale-[0.98] opacity-35" : "opacity-100"
+            className={`group relative flex cursor-grab gap-3.5 rounded-xl border border-slate-800/90 bg-[#0A0D14] p-3 shadow-sm transition-all duration-150 hover:border-slate-700 hover:bg-slate-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 active:cursor-grabbing ${isDragging ? "scale-[0.98] opacity-35" : "opacity-100"
                 }`}
         >
             {/* Reserved 9:16 Media Thumbnail Container (Prevents CLS) */}
-            <div className="relative h-24 w-16 shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+            <div className="relative h-24 w-16 shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-[#0A0D14]">
                 {clip.thumbnailUrl ? (
                     <img
                         src={clip.thumbnailUrl}
@@ -297,7 +297,7 @@ function DraggableClipCard({
                         className="h-full w-full object-cover"
                     />
                 ) : (
-                    <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-b from-slate-900 to-slate-950 p-1.5 text-center">
+                    <div className="flex h-full w-full flex-col items-center justify-center bg-[#0A0D14] from-slate-900 to-slate-950 p-1.5 text-center">
                         <svg
                             viewBox="0 0 24 24"
                             fill="none"
@@ -495,8 +495,8 @@ function DroppableCalendarDayCell({
         <div
             ref={setNodeRef}
             className={`group relative flex min-h-[148px] flex-col justify-between border-b border-r border-slate-800/80 p-2.5 transition-colors duration-150 ${isCurrentMonth
-                ? "bg-slate-950/60 hover:bg-slate-900/50"
-                : "bg-slate-950/95 text-slate-600"
+                ? "bg-[#0A0D14]"
+                : "bg-[#0A0D14]"
                 } ${isOver
                     ? "bg-sky-500/10 ring-2 ring-inset ring-sky-400"
                     : today
@@ -857,11 +857,11 @@ export default function CalendarClient({
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
         >
-            <div className="mx-auto grid max-w-[1600px] grid-cols-1 bg-slate-950 text-slate-100 lg:grid-cols-[380px_1fr]">
+            <div className=" grid max-w-[1600px] grid-cols-1 bg-[#0A0D14] text-slate-100 lg:grid-cols-[380px_1fr]">
                 {/* LEFT SIDEBAR: Ready Clips Backlog */}
                 <aside
                     aria-label="Unscheduled Clips Library"
-                    className="flex h-[calc(100vh-73px)] flex-col border-r border-slate-800/90 bg-slate-900/40"
+                    className="flex h-[calc(100vh-73px)] flex-col border-r border-slate-800/90 bg-[#0A0D14]"
                 >
                     <div className="border-b border-slate-800/90 p-4">
                         <div className="flex items-center justify-between gap-2">
@@ -916,7 +916,7 @@ export default function CalendarClient({
 
                     <div className="flex-1 space-y-3 overflow-y-auto p-4">
                         {filteredClips.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 px-5 py-10 text-center">
+                            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-[#0A0D14] px-5 py-10 text-center">
                                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800/80 text-slate-400">
                                     <svg
                                         viewBox="0 0 24 24"
@@ -971,7 +971,7 @@ export default function CalendarClient({
                     className="flex min-h-[calc(100vh-73px)] flex-col bg-slate-950"
                 >
                     {/* Calendar Top Control Bar */}
-                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/90 bg-slate-900/50 px-6 py-3.5">
+                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/90 bg-[#0A0D14] px-6 py-3.5">
                         {/* Left: Month Title & 44px Touch-Friendly Navigation */}
                         <div className="flex items-center gap-4">
                             <div className="flex items-center rounded-xl border border-slate-800 bg-slate-900 p-0.5">
@@ -1191,7 +1191,7 @@ export default function CalendarClient({
                     aria-labelledby="schedule-modal-title"
                     className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
                 >
-                    <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
+                    <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-800 bg-[#0A0D14] shadow-2xl">
                         {/* Modal Header */}
                         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
                             <div>
