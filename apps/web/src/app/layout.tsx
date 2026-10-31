@@ -15,9 +15,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-    title: "Video Repurposer Studio",
+    title: {
+        default: "Scroll Maestro",
+        template: "%s | Scroll Maestro",
+    },
     description:
-        "Extract viral clips, burn dynamic captions, and schedule across social channels.",
+        "Process, repurpose, and publish video content with Scroll Maestro.",
     other: {
         "tiktok-developers-site-verification": "Myo664XBjw9FTsA2ol7GmkECQXDzgomX",
     },
