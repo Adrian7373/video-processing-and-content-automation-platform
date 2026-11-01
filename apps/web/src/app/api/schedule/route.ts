@@ -28,28 +28,28 @@ const DEMO_ACCOUNT_MAP: Record<
     {
         platform: SocialPlatform;
         accountName: string;
-        platformUserId: string;
+        platformAccountId: string;
     }
 > = {
     "demo-yt": {
         platform: SocialPlatform.YOUTUBE_SHORTS,
         accountName: "YouTube Shorts",
-        platformUserId: "demo_youtube_shorts",
+        platformAccountId: "demo_youtube_shorts",
     },
     "demo-tt": {
         platform: SocialPlatform.TIKTOK,
         accountName: "TikTok Creator",
-        platformUserId: "demo_tiktok_creator",
+        platformAccountId: "demo_tiktok_creator",
     },
     "demo-ig": {
         platform: SocialPlatform.INSTAGRAM_REELS,
         accountName: "Instagram Reels",
-        platformUserId: "demo_instagram_reels",
+        platformAccountId: "demo_instagram_reels",
     },
     "demo-fb": {
         platform: SocialPlatform.FACEBOOK_REELS,
         accountName: "Facebook Reels",
-        platformUserId: "demo_facebook_reels",
+        platformAccountId: "demo_facebook_reels",
     },
 };
 
@@ -64,14 +64,14 @@ async function resolveOrCreateAccountId(
                 userId_platform_platformAccountId: {
                     userId,
                     platform: demoConfig.platform,
-                    platformAccountId: demoConfig.platformUserId,
+                    platformAccountId: demoConfig.platformAccountId,
                 },
             },
             update: {},
             create: {
                 userId,
                 platform: demoConfig.platform,
-                platformAccountId: demoConfig.platformUserId,
+                platformAccountId: demoConfig.platformAccountId,
                 accountName: demoConfig.accountName,
                 accessToken: `mock_token_${demoConfig.platform.toLowerCase()}`,
             },

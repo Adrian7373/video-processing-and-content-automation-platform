@@ -11,7 +11,7 @@ const createSocialAccountSchema = z.object({
     userId: z.string().min(1).default("demo-user"),
     platform: z.nativeEnum(SocialPlatform),
     accountName: z.string().trim().min(1).max(120),
-    platformUserId: z.string().trim().min(1).optional(),
+    platformAccountId: z.string().trim().min(1).optional(),
     accessToken: z.string().trim().min(1).optional(),
     refreshToken: z.string().trim().optional().nullable(),
     tokenExpiresAt: z.string().datetime().optional().nullable(),
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
                 userId: true,
                 platform: true,
                 accountName: true,
-                platformUserId: true,
+                platformAccountId: true,
                 tokenExpiresAt: true,
                 createdAt: true,
             },
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
 
     const data = parsed.data;
     const platformAccountId =
-        data.platformUserId ??
+        data.platformAccountId ??
         `mock_${data.platform.toLowerCase()}_${data.userId}`;
     const accessToken =
         data.accessToken ??
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
                 userId: true,
                 platform: true,
                 accountName: true,
-                platformUserId: true,
+                platformAccountId: true,
                 tokenExpiresAt: true,
                 createdAt: true,
             },

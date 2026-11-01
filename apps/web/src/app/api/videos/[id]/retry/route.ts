@@ -27,7 +27,7 @@ export async function POST(
             videoId: video.id,
             s3Key: video.s3Key,
             userId: video.userId,
-            userPrompt: video.userPrompt,
+            userPrompt: video.userPrompt ?? undefined,
             aspectRatio: video.aspectRatio,
             captionStyle: video.captionStyle,
         };
