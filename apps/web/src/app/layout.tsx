@@ -18,6 +18,9 @@ export const metadata: Metadata = {
     title: "Video Repurposer Studio",
     description:
         "Extract viral clips, burn dynamic captions, and schedule across social channels.",
+    other: {
+        "tiktok-developers-site-verification": "Myo664XBjw9FTsA2ol7GmkECQXDzgomX",
+    },
 };
 
 export default function RootLayout({
