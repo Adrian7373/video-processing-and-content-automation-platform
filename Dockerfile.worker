@@ -1,7 +1,7 @@
 FROM node:22-bookworm-slim
 
-# Install FFmpeg, fonts (for ASS subtitle burning), and OpenSSL (for Prisma)
-RUN apt-get update && apt-get install -y \
+# 1. Install FFmpeg, subtitle fonts, and OpenSSL
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     fonts-liberation \
     fonts-dejavu-core \
@@ -11,16 +11,22 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files
+# 2. Copy root and workspace package files
 COPY package*.json ./
+COPY apps/worker/package.json ./apps/worker/package.json
 COPY packages/database ./packages/database
-COPY apps/worker ./apps/worker
 
+# 3. Dummy URL so Prisma postinstall succeeds during build
 ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 
-# Install dependencies and generate Prisma client
-RUN npm ci
+# 4. Explicitly install all dependencies for the worker workspace and root
+RUN npm install --no-package-lock --workspace=apps/worker --include-workspace-root
+
+# 5. Copy worker source code
+COPY apps/worker ./apps/worker
+
+# 6. Generate Prisma Client
 RUN npx prisma generate --schema=packages/database/prisma/schema.prisma
 
-# Start the worker
+# 7. Start the worker
 CMD ["npm", "run", "start", "--workspace=apps/worker"]
