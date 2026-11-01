@@ -61,7 +61,10 @@ export async function GET(
 
         authUrl.searchParams.set("client_key", clientKey);
         authUrl.searchParams.set("response_type", "code");
-        authUrl.searchParams.set("scope", "user.info.basic,video.publish");
+        authUrl.searchParams.set(
+            "scope",
+            "user.info.basic,video.publish,video.upload",
+        );
         authUrl.searchParams.set("redirect_uri", redirectUri);
         authUrl.searchParams.set("state", state);
 
