@@ -534,7 +534,7 @@ export async function processVideo(
             });
         });
 
-        const flaskUrl = env.TRANSCRIBER_URL;
+        const flaskUrl = env.FLASK_API_URL;
         const flaskResponse = await axios.post(
             `${flaskUrl}/transcribe`,
             formData,

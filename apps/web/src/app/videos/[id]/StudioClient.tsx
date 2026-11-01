@@ -963,6 +963,7 @@ function MetadataEditor({
     const [keyPoints, setKeyPoints] = useState(segment.keyPoints.join("\n"));
     const [saving, setSaving] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
 
     useEffect(() => {
         setTitle(segment.title);
@@ -973,13 +974,20 @@ function MetadataEditor({
     }, [segment]);
 
     async function save() {
+        const trimmedTitle = title.trim();
+        if (!trimmedTitle) {
+            setSaveError("Add a title before saving.");
+            return;
+        }
+
         setSaving(true);
+        setSaveError(null);
         try {
             const response = await fetch(`/api/segments/${segment.id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    title,
+                    title: trimmedTitle,
                     thumbnailText: thumbnailText || null,
                     socialCaption: socialCaption || null,
                     keyPoints: keyPoints
@@ -993,6 +1001,7 @@ function MetadataEditor({
             onSaved();
         } catch (error) {
             console.error("Unable to save segment metadata.", error);
+            setSaveError("Unable to save changes. Please try again.");
         } finally {
             setSaving(false);
         }
@@ -1013,7 +1022,10 @@ function MetadataEditor({
                 </h2>
                 <button
                     type="button"
-                    onClick={() => setEditing(!editing)}
+                    onClick={() => {
+                        setEditing(!editing);
+                        setSaveError(null);
+                    }}
                     className="rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1 text-xs font-semibold text-sky-400 transition hover:border-slate-700 hover:text-sky-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
                 >
                     {editing ? "Cancel" : "Edit Metadata"}
@@ -1024,14 +1036,21 @@ function MetadataEditor({
                 <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
                     <label className="block">
                         <span className="mb-1.5 block text-xs font-semibold text-slate-300">
-                            Clip Title
+                            Video Title
+                        </span>
+                        <span className="mb-1.5 block text-[11px] leading-relaxed text-slate-500">
+                            Shown as the title when publishing to YouTube. Social captions are managed separately.
                         </span>
                         <input
-                            placeholder="Clip title"
+                            placeholder="Enter a title for this video segment"
                             value={title}
+                            maxLength={100}
                             onChange={(event) => setTitle(event.target.value)}
                             className="block w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
                         />
+                        <span className="mt-1 block text-right text-[10px] text-slate-500">
+                            {title.length} / 100
+                        </span>
                     </label>
 
                     <label className="block">
@@ -1080,6 +1099,11 @@ function MetadataEditor({
                     >
                         {saving ? "Saving Changes..." : "Save Metadata"}
                     </button>
+                    {saveError && (
+                        <p role="alert" className="text-xs text-rose-300">
+                            {saveError}
+                        </p>
+                    )}
                 </div>
             ) : (
                 <div className="space-y-4">

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 const segmentUpdateSchema = z
     .object({
-        title: z.string().trim().min(1).max(200).optional(),
+        title: z.string().trim().min(1).max(100).optional(),
         thumbnailText: z.string().trim().max(100).optional().nullable(),
         keyPoints: z.array(z.string().trim().min(1).max(500)).min(1).max(10).optional(),
         socialCaption: z.string().trim().max(3000).optional().nullable(),

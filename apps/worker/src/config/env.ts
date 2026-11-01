@@ -6,7 +6,7 @@ const envSchema = z.object({
     S3_BUCKET_NAME: z.string().min(1).optional(),
     AWS_REGION: z.string().min(1).optional(),
     FFMPEG_PATH: z.string().min(1).optional(),
-    TRANSCRIBER_URL: z.string().url().default("http://127.0.0.1:5001"),
+    FLASK_API_URL: z.string().url().default("http://127.0.0.1:5001"),
 });
 
 export const env = envSchema.parse(process.env);
