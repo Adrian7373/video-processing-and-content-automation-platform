@@ -98,15 +98,21 @@ function formatPublishError(error: unknown): string {
                 error?:
                 | string
                 | {
+                    code?: string;
                     message?: string;
                     errors?: Array<{ message?: string; reason?: string }>;
                 };
                 error_description?: string;
+                log_id?: string;
             }
             | undefined;
 
         if (typeof data?.error === "object" && data.error?.message) {
-            return `API Error (${status ?? "unknown"}): ${data.error.message}`;
+            const errorCode = data.error.code
+                ? ` [${data.error.code}]`
+                : "";
+            const logId = data.log_id ? ` (log ID: ${data.log_id})` : "";
+            return `API Error (${status ?? "unknown"})${errorCode}: ${data.error.message}${logId}`;
         }
         if (typeof data?.error_description === "string") {
             return `OAuth Error (${status ?? "unknown"}): ${data.error_description}`;

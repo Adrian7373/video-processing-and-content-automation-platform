@@ -26,6 +26,6 @@ publishingWorker.on("completed", (job) => {
 publishingWorker.on("failed", (job, error) => {
     console.error(
         `Social publishing job ${job?.id ?? "unknown"} (${job?.name ?? "unknown"}) failed:`,
-        error,
+        error instanceof Error ? error.message : String(error),
     );
 });
