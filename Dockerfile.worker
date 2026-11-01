@@ -16,6 +16,8 @@ COPY package*.json ./
 COPY packages/database ./packages/database
 COPY apps/worker ./apps/worker
 
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+
 # Install dependencies and generate Prisma client
 RUN npm ci
 RUN npx prisma generate --schema=packages/database/prisma/schema.prisma
