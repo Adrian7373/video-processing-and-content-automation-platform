@@ -32,13 +32,14 @@ process.once("SIGTERM", () => {
 console.log(
     "Worker listening on media-processing, video-processing, and publishing queues.",
 );
+const PORT = Number(process.env.PORT) || 8080;
 
 const server = http.createServer((req, res) => {
     res.writeHead(200);
     res.end("Worker is alive and listening!");
 });
 
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-    console.log(`Dummy HTTP server running on port ${PORT}`);
+
+server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Health check server listening on 0.0.0.0:${PORT}`);
 });
