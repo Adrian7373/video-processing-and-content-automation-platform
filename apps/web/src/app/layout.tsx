@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     description:
         "Process, repurpose, and publish video content with Scroll Maestro.",
     other: {
-        "tiktok-developers-site-verification": "Myo664XBjw9FTsA2ol7GmkECQXDzgomX",
+        "tiktok-developers-site-verification": "oQVLUiaDkPt4VJ6abyWy10kO1y8Hrqbu",
     },
 };
 
