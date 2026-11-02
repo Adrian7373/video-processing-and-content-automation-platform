@@ -312,12 +312,11 @@ async function publishToTikTok(
         data?: { publish_id?: string };
         error?: { code?: string; message?: string };
     }>(initEndpoint, requestBody, {
-            headers: {
-                Authorization: `Bearer ${ctx.accessToken}`,
-                "Content-Type": "application/json; charset=UTF-8",
-            },
-            timeout: 60_000,
+        headers: {
+            Authorization: ["Bearer", ctx.accessToken].join(" "),
+            "Content-Type": "application/json; charset=UTF-8",
         },
+        timeout: 60_000,
     });
 
     const publishId = response.data?.data?.publish_id;
