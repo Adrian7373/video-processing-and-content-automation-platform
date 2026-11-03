@@ -41,6 +41,8 @@ export const mediaWorker = new Worker<MediaQueueJobData, unknown>(
     {
         connection: redis,
         concurrency: 2,
+        drainDelay: 30,
+        stalledInterval: 300000,
     },
 );
 
@@ -50,6 +52,8 @@ export const legacyVideoWorker = new Worker<MediaQueueJobData, unknown>(
     {
         connection: redis,
         concurrency: 2,
+        drainDelay: 30,
+        stalledInterval: 300000,
     },
 );
 
