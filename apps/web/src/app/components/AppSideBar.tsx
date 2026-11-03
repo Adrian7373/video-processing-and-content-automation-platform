@@ -131,7 +131,7 @@ export default function AppSidebar() {
             <aside
                 id="app-sidebar"
                 aria-label="Primary sidebar navigation"
-                className={`fixed inset-y-0 left-0 z-50 flex h-screen w-[280px] shrink-0 flex-col border-r border-line bg-page text-ink select-none transition-[transform,width] duration-200 ease-out md:sticky md:top-0 md:z-30 md:translate-x-0 ${drawerOpen ? "translate-x-0" : "-translate-x-full"} ${collapsed ? "md:w-[72px]" : "md:w-[252px]"}`}
+                className={`sticky top-0 z-30 flex h-screen shrink-0 flex-col border-r border-line bg-page text-ink select-none transition-[transform,width] duration-200 ease-out ${collapsed ? "w-[72px]" : "w-[252px]"} max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[280px] ${drawerOpen ? "" : "max-md:-translate-x-full"}`}
             >
                 {/* Top Brand & Collapse Button */}
                 <div className={`flex h-16 items-center px-4 ${collapsed ? "justify-center" : "justify-between"}`}>
