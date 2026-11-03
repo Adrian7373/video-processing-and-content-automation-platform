@@ -62,10 +62,18 @@ const NAV_GROUPS: readonly NavGroup[] = [
 export default function AppSidebar() {
     const pathname = usePathname();
     const { mode: themeMode, setMode: setThemeMode } = useTheme();
-    const [collapsed, setCollapsed] = useState(false);
+    // Workspace pages (calendar, studio) need the width, so they default to the
+    // icon rail. An explicit expand/collapse by the user wins on each kind of page.
+    const isWorkspace = pathname.startsWith("/calendar") || /^\/videos\/[^/]+/.test(pathname);
+    const [collapsePref, setCollapsePref] = useState<{ workspace: boolean | null; page: boolean | null }>({ workspace: null, page: null });
+    const railPreferred = (isWorkspace ? collapsePref.workspace : collapsePref.page) ?? isWorkspace;
+    const setCollapsed = (update: (prev: boolean) => boolean) =>
+        setCollapsePref((prev) => ({ ...prev, [isWorkspace ? "workspace" : "page"]: update(railPreferred) }));
     // Phone drawer: open only for the path it was opened on, so navigating closes it.
     const [drawerPath, setDrawerPath] = useState<string | null>(null);
     const drawerOpen = drawerPath === pathname;
+    // The phone drawer always opens fully expanded.
+    const collapsed = railPreferred && !drawerOpen;
 
     useEffect(() => {
         const toggle = () => setDrawerPath((current) => (current === null ? window.location.pathname : null));

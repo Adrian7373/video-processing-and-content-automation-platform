@@ -24,10 +24,26 @@ const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
+ * Read-only lookup of the signed-in user or the guest from the trial cookie.
+ * Returns null for a first-time visitor. Safe in Server Components (pages and
+ * layouts), which may read cookies but must never set them.
+ */
+export async function getExistingActor(): Promise<ResolvedActor | null> {
+    return findActor();
+}
+
+/**
  * Resolves the current authenticated user OR provisions an anonymous trial user
- * backed by an HTTP-only cookie. Safe to call in Route Handlers and Server Actions.
+ * backed by an HTTP-only cookie. Only call this from Route Handlers and Server
+ * Actions: creating a guest sets a cookie, which Server Components cannot do.
  */
 export async function getOrCreateActor(): Promise<ResolvedActor> {
+    const existing = await findActor();
+    if (existing) return existing;
+    return createGuestActor();
+}
+
+async function findActor(): Promise<ResolvedActor | null> {
     const session = await auth();
 
     // 1. Authenticated NextAuth User
@@ -85,7 +101,13 @@ export async function getOrCreateActor(): Promise<ResolvedActor> {
         }
     }
 
-    // 3. Provision a fresh Anonymous Trial User (3 trial credits)
+    return null;
+}
+
+async function createGuestActor(): Promise<ResolvedActor> {
+    const cookieStore = await cookies();
+
+    // Provision a fresh anonymous trial user (3 trial credits)
     const createdGuest = await prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
             data: {

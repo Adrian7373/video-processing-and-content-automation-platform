@@ -18,6 +18,7 @@ import {
     MAX_UPLOAD_FILE_SIZE_BYTES,
 } from "../../../../../packages/database/uploadLimits";
 import type { CreditsStatusResponse } from "@/app/api/credits/route";
+import OutputPreview from "./OutputPreview";
 
 type UploadStatus = "idle" | "requesting" | "uploading" | "processing" | "error";
 type ProcessingMode = "CLIP" | "CAPTION_ONLY";
@@ -166,14 +167,36 @@ export default function VideoUploader() {
 
     const selectFile = (nextFile: File | null) => {
         setFile(nextFile);
+        readDuration(nextFile);
         setStatus("idle");
         setErrorMessage(null);
         setLastQueuedVideoId(null);
         setProgress(0);
     };
 
+    const [fileDuration, setFileDuration] = useState<number | null>(null);
+
+    // Reads the duration for the live preview; unreadable files simply show none.
+    const readDuration = (nextFile: File | null) => {
+        setFileDuration(null);
+        if (!nextFile) return;
+        const url = URL.createObjectURL(nextFile);
+        const probe = document.createElement("video");
+        probe.preload = "metadata";
+        probe.muted = true;
+        const done = (value: number | null) => {
+            URL.revokeObjectURL(url);
+            setFileDuration(value !== null && Number.isFinite(value) && value > 0 ? value : null);
+        };
+        probe.onloadedmetadata = () => done(probe.duration);
+        probe.onerror = () => done(null);
+        probe.src = url;
+    };
+
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-        setFile(event.target.files?.[0] ?? null);
+        const nextFile = event.target.files?.[0] ?? null;
+        setFile(nextFile);
+        readDuration(nextFile);
         setStatus("idle");
         setErrorMessage(null);
         setLastQueuedVideoId(null);
@@ -461,6 +484,7 @@ export default function VideoUploader() {
 
     return (
         <>
+            <div className="grid w-full max-w-[1120px] items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] xl:gap-16">
             <section className="w-full max-w-xl text-ink">
                 {/* Header */}
                 <div className="mb-8">
@@ -687,6 +711,17 @@ export default function VideoUploader() {
                     </div>
                 </form>
             </section>
+
+            <aside aria-label="Preview of the result" className="hidden lg:sticky lg:top-24 lg:block">
+                <OutputPreview
+                    mode={mode}
+                    aspectRatio={aspectRatio}
+                    captionStyle={captionStyle}
+                    fileName={file?.name ?? null}
+                    durationSeconds={fileDuration}
+                />
+            </aside>
+            </div>
 
             {/* AUTH GATE MODAL (Google OAuth + Email/Password) */}
             {isAuthModalOpen && (

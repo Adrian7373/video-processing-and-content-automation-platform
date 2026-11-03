@@ -1,6 +1,6 @@
 import { prisma } from "../../../../../packages/database/index";
 import { getSignedDownloadUrl } from "@/lib/s3";
-import { getOrCreateActor } from "@/lib/auth";
+import { getExistingActor } from "@/lib/auth";
 import CalendarClient, {
     type CalendarClipItem,
     type CalendarScheduledPostItem,
@@ -10,7 +10,12 @@ import CalendarClient, {
 export const dynamic = "force-dynamic";
 
 export default async function CalendarPage() {
-    const actor = await getOrCreateActor();
+    // First-time visitors have no guest cookie yet; show the empty page
+    // instead of creating one here (Server Components cannot set cookies).
+    const actor = (await getExistingActor()) ?? {
+        userId: "00000000-0000-0000-0000-000000000000",
+        isAnonymous: true,
+    };
 
     const [segments, scheduledPosts, socialAccounts] = await Promise.all([
         prisma.videoSegment.findMany({
