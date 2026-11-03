@@ -27,44 +27,44 @@ const PLATFORMS: readonly PlatformConfig[] = [
         slug: "youtube",
         name: "YouTube Shorts",
         description:
-            "Publish vertical 9:16 clips directly to your YouTube channel via YouTube Data API v3.",
+            "Post vertical clips straight to your YouTube channel as Shorts.",
         available: true,
-        accentBorder: "hover:border-white/50",
-        badgeBg: "bg-rose-500/10 text-rose-300 border-rose-500/30",
-        iconColor: "text-rose-400",
+        accentBorder: "hover:border-line-strong",
+        badgeBg: "bg-danger/10 text-danger border-danger/30",
+        iconColor: "text-[#FF0033]",
     },
     {
         platform: "TIKTOK",
         slug: "tiktok",
         name: "TikTok",
         description:
-            "Direct video publishing to TikTok creator accounts via TikTok Content Posting API.",
+            "Post clips to your TikTok account, or send them to your drafts to finish in the app.",
         available: true,
-        accentBorder: "hover:border-white/50",
-        badgeBg: "bg-cyan-400/10 text-cyan-300 border-cyan-400/30",
-        iconColor: "text-cyan-300",
+        accentBorder: "hover:border-line-strong",
+        badgeBg: "bg-cyan-400/10 text-cyan-700 dark:text-cyan-300 border-cyan-400/30",
+        iconColor: "text-ink",
     },
     {
         platform: "INSTAGRAM_REELS",
         slug: "instagram",
         name: "Instagram Reels",
         description:
-            "Automated Reels publishing for Instagram Creator & Business accounts via Meta Graph API.",
+            "Post clips as Reels to Instagram creator and business accounts.",
         available: false,
-        accentBorder: "hover:border-white/50",
-        badgeBg: "bg-pink-500/10 text-pink-300 border-pink-500/30",
-        iconColor: "text-pink-400",
+        accentBorder: "hover:border-line-strong",
+        badgeBg: "bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-500/30",
+        iconColor: "text-[#E1306C]",
     },
     {
         platform: "FACEBOOK_REELS",
         slug: "facebook",
         name: "Facebook Reels",
         description:
-            "Distribute short-form video clips to Facebook Pages via Meta Graph API.",
+            "Post clips as Reels to your Facebook Pages.",
         available: false,
-        accentBorder: "hover:border-white/50",
-        badgeBg: "bg-blue-500/10 text-blue-300 border-blue-500/30",
-        iconColor: "text-blue-400",
+        accentBorder: "hover:border-line-strong",
+        badgeBg: "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30",
+        iconColor: "text-[#1877F2]",
     },
 ];
 
@@ -173,19 +173,21 @@ export default function ChannelsClient() {
     };
 
     return (
-        <main className="bg-[#0A0D14] text-slate-100">
+        <main className="bg-page text-ink">
 
-            <div className="mx-auto max-w-5xl px-6 py-8">
+            <div className="mx-auto max-w-5xl px-6 py-10">
+                <header className="mb-8 max-w-[62ch]">
+                    <h1 className="font-display text-[32px] font-medium leading-tight tracking-[-0.025em] text-ink">Social accounts</h1>
+                    <p className="mt-2 text-base text-muted">Connect the accounts you post to. Scheduled clips publish to them automatically.</p>
+                </header>
                 {/* OAuth Status Banners */}
                 {connectedParam && (
                     <div
                         role="status"
-                        className="mb-6 flex items-center justify-between rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-xs text-emerald-200"
+                        className="mb-6 flex items-center justify-between rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-xs text-success"
                     >
                         <span className="font-semibold">
-                            Successfully connected your{" "}
-                            <span className="uppercase">{connectedParam}</span>{" "}
-                            channel! You can now schedule live video posts.
+                            Your {connectedParam} account is connected. You can now schedule posts to it.
                         </span>
                     </div>
                 )}
@@ -193,7 +195,7 @@ export default function ChannelsClient() {
                 {errorParam && (
                     <div
                         role="alert"
-                        className="mb-6 flex items-center justify-between rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-200"
+                        className="mb-6 flex items-center justify-between rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-xs text-danger"
                     >
                         <span className="font-medium">{errorParam}</span>
                     </div>
@@ -209,13 +211,13 @@ export default function ChannelsClient() {
                         return (
                             <section
                                 key={item.platform}
-                                className={`flex flex-col justify-between rounded-2xl border border-slate-800/90 bg-[#0E111A] p-6 shadow-lg transition ${item.accentBorder}`}
+                                className={`flex flex-col justify-between rounded-xl border border-line bg-raised p-6 transition ${item.accentBorder}`}
                             >
                                 <div>
                                     <div className="flex items-start justify-between gap-4">
                                         <div className="flex items-center gap-3">
                                             <div
-                                                className={`flex h-11 w-11 items-center justify-center rounded-xl border border-slate-800 bg-slate-950 ${item.iconColor}`}
+                                                className={`flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-page ${item.iconColor}`}
                                             >
                                                 <PlatformIcon
                                                     platform={item.platform}
@@ -223,48 +225,48 @@ export default function ChannelsClient() {
                                                 />
                                             </div>
                                             <div>
-                                                <h2 className="text-base font-bold text-white">
+                                                <h2 className="text-base font-semibold text-ink">
                                                     {item.name}
                                                 </h2>
                                                 <span
-                                                    className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold ${connectedForPlatform.length >
+                                                    className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-xs font-semibold ${connectedForPlatform.length >
                                                         0
-                                                        ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+                                                        ? "border-success/30 bg-success/10 text-success"
                                                         : item.available
-                                                            ? "border-slate-700 bg-slate-800 text-slate-300"
-                                                            : "border-slate-800 bg-slate-950 text-slate-500"
+                                                            ? "border-line-strong bg-surface text-ink"
+                                                            : "border-line bg-surface text-muted"
                                                         }`}
                                                 >
                                                     {connectedForPlatform.length >
                                                         0
-                                                        ? `${connectedForPlatform.length} Connected`
+                                                        ? `${connectedForPlatform.length} connected`
                                                         : item.available
-                                                            ? "Ready to Connect"
-                                                            : "Phase 2 Roadmap"}
+                                                            ? "Not connected"
+                                                            : "Coming soon"}
                                                 </span>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <p className="mt-3 text-xs leading-relaxed text-slate-400">
+                                    <p className="mt-4 text-sm leading-relaxed text-muted">
                                         {item.description}
                                     </p>
 
                                     {/* Connected Account List */}
                                     <div className="mt-5 space-y-2">
                                         {loading ? (
-                                            <div className="h-12 animate-pulse rounded-xl bg-slate-800/60" />
+                                            <div className="h-12 animate-pulse rounded-xl bg-surface" />
                                         ) : connectedForPlatform.length > 0 ? (
                                             connectedForPlatform.map((acc) => (
                                                 <div
                                                     key={acc.id}
-                                                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/90 px-3.5 py-2.5 text-xs"
+                                                    className="flex items-center justify-between gap-3 rounded-xl border border-line bg-page/90 px-3.5 py-2.5 text-xs"
                                                 >
                                                     <div className="min-w-0">
-                                                        <p className="truncate font-semibold text-slate-100">
+                                                        <p className="truncate font-semibold text-ink">
                                                             {acc.accountName}
                                                         </p>
-                                                        <p className="truncate font-mono text-[10px] text-slate-500">
+                                                        <p className="truncate tabular-nums text-xs text-muted">
                                                             ID:{" "}
                                                             {
                                                                 acc.platformAccountId
@@ -283,7 +285,7 @@ export default function ChannelsClient() {
                                                                 acc.id,
                                                             )
                                                         }
-                                                        className="shrink-0 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-300 transition hover:bg-rose-500/20 disabled:opacity-50"
+                                                        className="shrink-0 rounded-lg border border-danger/30 bg-danger/10 px-2.5 py-1 text-xs font-semibold text-danger transition hover:bg-danger/20 disabled:opacity-50"
                                                     >
                                                         {disconnectingId ===
                                                             acc.id
@@ -293,19 +295,18 @@ export default function ChannelsClient() {
                                                 </div>
                                             ))
                                         ) : (
-                                            <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/40 px-3.5 py-3 text-center text-xs text-slate-500">
-                                                No {item.name} account linked
-                                                yet.
+                                            <div className="rounded-xl border border-dashed border-line bg-surface px-3.5 py-3 text-center text-xs text-muted">
+                                                No account connected yet
                                             </div>
                                         )}
                                     </div>
                                 </div>
 
-                                <div className="mt-6 border-t border-slate-800/80 pt-4">
+                                <div className="mt-6 border-t border-line pt-4">
                                     {item.available ? (
                                         <a
                                             href={`/api/integrations/${item.slug}/connect?returnTo=/channels`}
-                                            className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl bg-sky-400 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-sky-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                                            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-line-strong bg-raised px-4 text-sm font-medium text-ink transition hover:border-ink hover:bg-surface active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                                         >
                                             <svg
                                                 viewBox="0 0 24 24"
@@ -329,16 +330,16 @@ export default function ChannelsClient() {
                                                 />
                                             </svg>
                                             {connectedForPlatform.length > 0
-                                                ? `Connect Another ${item.name} Channel`
+                                                ? `Connect another ${item.name} account`
                                                 : `Connect ${item.name}`}
                                         </a>
                                     ) : (
                                         <button
                                             type="button"
                                             disabled
-                                            className="flex min-h-[42px] w-full cursor-not-allowed items-center justify-center rounded-xl border border-slate-800 bg-slate-950 px-4 py-2.5 text-xs font-semibold text-slate-500"
+                                            className="flex h-11 w-full cursor-not-allowed items-center justify-center rounded-lg border border-line bg-surface px-4 text-sm font-medium text-muted"
                                         >
-                                            OAuth Adapter Coming Next
+                                            Available soon
                                         </button>
                                     )}
                                 </div>

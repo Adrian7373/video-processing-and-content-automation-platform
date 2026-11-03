@@ -114,37 +114,37 @@ const PLATFORM_META: Record<
         label: "YouTube Shorts",
         shortLabel: "Shorts",
         pillSurface:
-            "bg-slate-900/95 border-slate-800 hover:border-rose-500/50 text-slate-100",
-        accentBar: "bg-rose-500",
-        iconColor: "text-rose-400",
-        activeRing: "border-rose-500/60 bg-rose-500/10 text-white",
+            "bg-raised/95 border-line hover:border-danger/50 text-ink",
+        accentBar: "bg-danger",
+        iconColor: "text-danger",
+        activeRing: "border-danger/60 bg-danger/10 text-page",
     },
     TIKTOK: {
         label: "TikTok",
         shortLabel: "TikTok",
         pillSurface:
-            "bg-slate-900/95 border-slate-800 hover:border-cyan-400/50 text-slate-100",
+            "bg-raised/95 border-line hover:border-cyan-400/50 text-ink",
         accentBar: "bg-cyan-400",
-        iconColor: "text-cyan-300",
-        activeRing: "border-cyan-400/60 bg-cyan-400/10 text-white",
+        iconColor: "text-cyan-700 dark:text-cyan-300",
+        activeRing: "border-cyan-400/60 bg-cyan-400/10 text-ink",
     },
     INSTAGRAM_REELS: {
         label: "Instagram Reels",
         shortLabel: "Reels",
         pillSurface:
-            "bg-slate-900/95 border-slate-800 hover:border-pink-500/50 text-slate-100",
+            "bg-raised/95 border-line hover:border-pink-500/50 text-ink",
         accentBar: "bg-pink-500",
-        iconColor: "text-pink-400",
-        activeRing: "border-pink-500/60 bg-pink-500/10 text-white",
+        iconColor: "text-pink-700 dark:text-pink-400",
+        activeRing: "border-pink-500/60 bg-pink-500/10 text-ink",
     },
     FACEBOOK_REELS: {
         label: "Facebook Reels",
         shortLabel: "FB Reels",
         pillSurface:
-            "bg-slate-900/95 border-slate-800 hover:border-blue-500/50 text-slate-100",
+            "bg-raised/95 border-line hover:border-blue-500/50 text-ink",
         accentBar: "bg-blue-500",
-        iconColor: "text-blue-400",
-        activeRing: "border-blue-500/60 bg-blue-500/10 text-white",
+        iconColor: "text-blue-700 dark:text-blue-400",
+        activeRing: "border-blue-500/60 bg-blue-500/10 text-ink",
     },
 };
 
@@ -154,28 +154,28 @@ const STATUS_META: Record<
 > = {
     SCHEDULED: {
         label: "Scheduled",
-        badgeClass: "border-amber-400/30 bg-amber-400/10 text-amber-300",
-        dotClass: "bg-amber-400",
+        badgeClass: "border-action/30 bg-action/15 text-link",
+        dotClass: "bg-action",
     },
     PUBLISHING: {
         label: "Publishing",
-        badgeClass: "border-sky-400/30 bg-sky-400/10 text-sky-300",
-        dotClass: "bg-sky-400 animate-ping",
+        badgeClass: "border-action/30 bg-action/12 text-link",
+        dotClass: "bg-action animate-ping",
     },
     PUBLISHED: {
         label: "Published",
-        badgeClass: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
-        dotClass: "bg-emerald-400",
+        badgeClass: "border-success/30 bg-success/10 text-success",
+        dotClass: "bg-success",
     },
     FAILED: {
         label: "Failed",
-        badgeClass: "border-rose-500/30 bg-rose-500/10 text-rose-300",
-        dotClass: "bg-rose-500",
+        badgeClass: "border-danger/30 bg-danger/10 text-danger",
+        dotClass: "bg-danger",
     },
     CANCELLED: {
         label: "Cancelled",
-        badgeClass: "border-slate-700 bg-slate-800/60 text-slate-400",
-        dotClass: "bg-slate-500",
+        badgeClass: "border-line-strong bg-surface text-muted",
+        dotClass: "bg-muted",
     },
 };
 
@@ -281,11 +281,11 @@ function DraggableClipCard({
             {...listeners}
             {...attributes}
             aria-label={`Draggable clip: ${clip.title}`}
-            className={`group relative flex cursor-grab gap-3.5 rounded-xl border border-slate-800/90 bg-[#0A0D14] p-3 shadow-sm transition-all duration-150 hover:border-slate-700 hover:bg-slate-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 active:cursor-grabbing ${isDragging ? "scale-[0.98] opacity-35" : "opacity-100"
+            className={`group relative flex cursor-grab gap-3.5 rounded-xl border border-line bg-page p-3 transition-all duration-150 hover:border-line-strong hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus active:cursor-grabbing ${isDragging ? "scale-[0.98] opacity-35" : "opacity-100"
                 }`}
         >
             {/* Reserved 9:16 Media Thumbnail Container (Prevents CLS) */}
-            <div className="relative h-24 w-16 shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-[#0A0D14]">
+            <div className="relative h-24 w-16 shrink-0 overflow-hidden rounded-lg border border-line bg-page">
                 {clip.thumbnailUrl ? (
                     <img
                         src={clip.thumbnailUrl}
@@ -294,14 +294,14 @@ function DraggableClipCard({
                         className="h-full w-full object-cover"
                     />
                 ) : (
-                    <div className="flex h-full w-full flex-col items-center justify-center bg-[#0A0D14] from-slate-900 to-slate-950 p-1.5 text-center">
+                    <div className="flex h-full w-full flex-col items-center justify-center bg-page from-raised to-page p-1.5 text-center">
                         <svg
                             viewBox="0 0 24 24"
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="1.75"
                             aria-hidden="true"
-                            className="h-5 w-5 text-slate-600 transition-colors group-hover:text-sky-400"
+                            className="h-5 w-5 text-muted transition-colors group-hover:text-link"
                         >
                             <polygon points="5 3 19 12 5 21 5 3" />
                         </svg>
@@ -309,7 +309,7 @@ function DraggableClipCard({
                 )}
 
                 {/* Duration Overlay */}
-                <span className="absolute bottom-1 right-1 rounded bg-slate-950/90 px-1 py-0.5 font-mono text-[10px] font-medium text-slate-200">
+                <span className="absolute bottom-1 right-1 rounded bg-page/90 px-1 py-0.5 tabular-nums text-xs font-medium text-ink">
                     {formatDurationBadge(clip.durationSeconds)}
                 </span>
             </div>
@@ -318,7 +318,7 @@ function DraggableClipCard({
             <div className="flex min-w-0 flex-1 flex-col justify-between">
                 <div>
                     <div className="flex items-center justify-between gap-1.5">
-                        <span className="truncate rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
+                        <span className="truncate rounded bg-action/12 px-1.5 py-0.5 text-xs font-semibold text-link">
                             {clip.thumbnailText || "HIGHLIGHT"}
                         </span>
 
@@ -327,7 +327,7 @@ function DraggableClipCard({
                             viewBox="0 0 24 24"
                             fill="currentColor"
                             aria-hidden="true"
-                            className="h-3.5 w-3.5 shrink-0 text-slate-600 transition-colors group-hover:text-slate-400"
+                            className="h-3.5 w-3.5 shrink-0 text-muted transition-colors group-hover:text-muted"
                         >
                             <circle cx="9" cy="6" r="1.5" />
                             <circle cx="15" cy="6" r="1.5" />
@@ -338,30 +338,30 @@ function DraggableClipCard({
                         </svg>
                     </div>
 
-                    <h3 className="mt-1.5 line-clamp-1 text-sm font-semibold leading-snug text-slate-100">
+                    <h3 className="mt-1.5 line-clamp-1 text-sm font-semibold leading-snug text-ink">
                         {clip.title}
                     </h3>
-                    <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">
+                    <p className="mt-0.5 line-clamp-1 text-xs text-muted">
                         {clip.parentVideoTitle}
                     </p>
                 </div>
 
                 {/* Metadata & Action Row */}
-                <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-800/80 pt-2">
-                    <div className="flex flex-wrap items-center gap-1 text-[11px]">
-                        <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-slate-300">
+                <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-line pt-2">
+                    <div className="flex flex-wrap items-center gap-1 text-xs">
+                        <span className="rounded bg-surface px-1.5 py-0.5 tabular-nums text-ink">
                             {ratioLabel}
                         </span>
                         {clip.hasBurnedCaptions && (
                             <span
                                 title="Burned-in subtitles included"
-                                className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-300"
+                                className="rounded bg-success/10 px-1.5 py-0.5 font-medium text-success"
                             >
                                 CC
                             </span>
                         )}
                         {scheduledCount > 0 && (
-                            <span className="rounded bg-amber-400/10 px-1.5 py-0.5 font-medium text-amber-300">
+                            <span className="rounded bg-action/15 px-1.5 py-0.5 font-medium text-link">
                                 {scheduledCount}× queued
                             </span>
                         )}
@@ -372,7 +372,7 @@ function DraggableClipCard({
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={() => onQuickSchedule(clip)}
                         aria-label={`Schedule ${clip.title}`}
-                        className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/90 px-2.5 py-1 text-xs font-medium text-slate-100 transition hover:border-sky-400/60 hover:bg-sky-500 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                        className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-line-strong bg-surface/90 px-2.5 py-1 text-xs font-medium text-ink transition hover:border-action/60 hover:bg-action-press hover:text-action-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     >
                         <svg
                             viewBox="0 0 24 24"
@@ -433,7 +433,7 @@ function DraggableScheduledPostPill({
                     onSelectPost(post);
                 }
             }}
-            className={`group relative flex cursor-grab items-center justify-between gap-2 overflow-hidden rounded-lg border py-1.5 pl-2.5 pr-2 text-xs shadow-sm transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 active:cursor-grabbing ${platformMeta.pillSurface
+            className={`group relative flex cursor-grab items-center justify-between gap-2 overflow-hidden rounded-lg border py-1.5 pl-2.5 pr-2 text-xs transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus active:cursor-grabbing ${platformMeta.pillSurface
                 } ${isDragging ? "scale-95 opacity-30" : "opacity-100"}`}
         >
             {/* Left Platform Accent Bar */}
@@ -449,13 +449,13 @@ function DraggableScheduledPostPill({
                         className="h-3.5 w-3.5"
                     />
                 </span>
-                <span className="truncate font-medium text-slate-100">
+                <span className="truncate font-medium text-ink">
                     {post.segmentTitle}
                 </span>
             </div>
 
             <div className="flex shrink-0 items-center gap-1.5">
-                <span className="font-mono text-[10px] text-slate-400">
+                <span className="tabular-nums text-xs text-muted">
                     {timeFormatted}
                 </span>
                 <span
@@ -491,13 +491,13 @@ function DroppableCalendarDayCell({
     return (
         <div
             ref={setNodeRef}
-            className={`group relative flex min-h-[148px] flex-col justify-between border-b border-r border-slate-800/80 p-2.5 transition-colors duration-150 ${isCurrentMonth
-                ? "bg-[#0A0D14]"
-                : "bg-[#0A0D14]"
+            className={`group relative flex min-h-[148px] flex-col justify-between border-b border-r border-line p-2.5 transition-colors duration-150 ${isCurrentMonth
+                ? "bg-page"
+                : "bg-page"
                 } ${isOver
-                    ? "bg-sky-500/10 ring-2 ring-inset ring-sky-400"
+                    ? "bg-action/12 ring-2 ring-inset ring-focus"
                     : today
-                        ? "bg-slate-900/40"
+                        ? "bg-surface"
                         : ""
                 }`}
         >
@@ -507,16 +507,16 @@ function DroppableCalendarDayCell({
                     <div className="flex items-center gap-1.5">
                         <span
                             className={`inline-flex h-7 w-7 items-center justify-center rounded-lg text-xs font-semibold transition-colors ${today
-                                ? "bg-sky-400 font-bold text-slate-950 shadow-sm shadow-sky-400/30"
+                                ? "bg-action font-semibold text-action-ink "
                                 : isCurrentMonth
-                                    ? "text-slate-200"
-                                    : "text-slate-600"
+                                    ? "text-ink"
+                                    : "text-muted"
                                 }`}
                         >
                             {format(day, "d")}
                         </span>
                         {today && (
-                            <span className="rounded bg-sky-400/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
+                            <span className="rounded bg-action/15 px-1.5 py-0.5 text-xs font-semibold text-link">
                                 Today
                             </span>
                         )}
@@ -527,7 +527,7 @@ function DroppableCalendarDayCell({
                         type="button"
                         onClick={() => onAddClick(day)}
                         aria-label={`Schedule clip on ${format(day, "MMMM d, yyyy")}`}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-slate-500 transition hover:border-slate-700 hover:bg-slate-800 hover:text-slate-100 focus-visible:border-sky-400 focus-visible:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-muted transition hover:border-line-strong hover:bg-surface hover:text-ink focus-visible:border-action focus-visible:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     >
                         <svg
                             viewBox="0 0 24 24"
@@ -557,7 +557,7 @@ function DroppableCalendarDayCell({
 
             {/* Active Drop Zone Feedback */}
             {isOver && (
-                <div className="mt-2 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-sky-400/70 bg-sky-500/10 py-1.5 text-[11px] font-semibold text-sky-300">
+                <div className="mt-2 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-action/70 bg-action/12 py-1.5 text-xs font-semibold text-link">
                     <svg
                         viewBox="0 0 24 24"
                         fill="none"
@@ -865,27 +865,27 @@ export default function CalendarClient({
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
         >
-            <div className=" grid max-w-[1600px] grid-cols-1 bg-[#0A0D14] text-slate-100 lg:grid-cols-[380px_1fr]">
+            <div className="grid max-w-[1600px] grid-cols-1 bg-page text-ink lg:grid-cols-[380px_1fr]">
                 {/* LEFT SIDEBAR: Ready Clips Backlog */}
                 <aside
-                    aria-label="Unscheduled Clips Library"
-                    className="flex h-[calc(100vh-73px)] flex-col border-r border-slate-800/90 bg-[#0A0D14]"
+                    aria-label="Clip library"
+                    className="flex h-[calc(100vh-73px)] flex-col border-r border-line bg-page"
                 >
-                    <div className="border-b border-slate-800/90 p-4">
+                    <div className="border-b border-line p-4">
                         <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
-                                <h2 className="text-sm font-semibold tracking-tight text-slate-100">
-                                    Clip Library
+                                <h2 className="text-sm font-semibold tracking-tight text-ink">
+                                    Clip library
                                 </h2>
                                 <span
                                     aria-live="polite"
-                                    className="rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 font-mono text-xs font-medium text-slate-300"
+                                    className="rounded-full border border-line-strong bg-surface px-2 py-0.5 tabular-nums text-xs font-medium text-ink"
                                 >
                                     {filteredClips.length}
                                 </span>
                             </div>
 
-                            <label className="inline-flex cursor-pointer select-none items-center gap-2 text-xs font-medium text-slate-300 hover:text-white">
+                            <label className="inline-flex cursor-pointer select-none items-center gap-2 text-xs font-medium text-ink hover:text-ink">
                                 <input
                                     type="checkbox"
                                     checked={onlyUnscheduled}
@@ -893,7 +893,7 @@ export default function CalendarClient({
                                         setOnlyUnscheduled(e.target.checked);
                                         setClipPage(1);
                                     }}
-                                    className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-400 focus:ring-2 focus:ring-sky-400 focus:ring-offset-0"
+                                    className="h-4 w-4 rounded border-line-strong bg-raised text-link focus:ring-2 focus:ring-focus focus:ring-offset-0"
                                 />
                                 Unscheduled only
                             </label>
@@ -907,7 +907,7 @@ export default function CalendarClient({
                                 stroke="currentColor"
                                 strokeWidth="2"
                                 aria-hidden="true"
-                                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
+                                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
                             >
                                 <circle cx="11" cy="11" r="8" />
                                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -921,15 +921,15 @@ export default function CalendarClient({
                                 }}
                                 aria-label="Search clips by title"
                                 placeholder="Search clips or source video..."
-                                className="block w-full rounded-xl border border-slate-800 bg-slate-950/90 py-2 pl-9 pr-3 text-xs text-slate-100 placeholder:text-slate-500 transition focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                className="block w-full rounded-xl border border-line bg-page/90 py-2 pl-9 pr-3 text-xs text-ink placeholder:text-muted transition focus:border-action focus:outline-none focus:ring-1 focus:ring-focus"
                             />
                         </div>
                     </div>
 
                     <div className="flex-1 space-y-3 overflow-y-auto p-4">
                         {filteredClips.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-[#0A0D14] px-5 py-10 text-center">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800/80 text-slate-400">
+                            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-line bg-page px-5 py-10 text-center">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface/80 text-muted">
                                     <svg
                                         viewBox="0 0 24 24"
                                         fill="none"
@@ -951,10 +951,10 @@ export default function CalendarClient({
                                         <line x1="2" y1="12" x2="22" y2="12" />
                                     </svg>
                                 </div>
-                                <p className="mt-3 text-sm font-semibold text-slate-200">
+                                <p className="mt-3 text-sm font-semibold text-ink">
                                     No matching clips
                                 </p>
-                                <p className="mt-1 max-w-[220px] text-xs leading-relaxed text-slate-400">
+                                <p className="mt-1 max-w-[220px] text-xs leading-relaxed text-muted">
                                     {onlyUnscheduled
                                         ? "All available clips have been scheduled. Uncheck the filter to re-queue."
                                         : "Process a video in the studio or clear your search query."}
@@ -976,16 +976,16 @@ export default function CalendarClient({
                         )}
                     </div>
                     {filteredClips.length > CLIPS_PER_PAGE && (
-                        <div className="flex items-center justify-between border-t border-slate-800/90 px-4 py-3">
+                        <div className="flex items-center justify-between border-t border-line px-4 py-3">
                             <button
                                 type="button"
                                 onClick={() => setClipPage((page) => Math.max(1, page - 1))}
                                 disabled={validClipPage === 1}
-                                className="rounded-lg border border-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                                className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-semibold text-ink transition hover:border-line-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
                             >
                                 Previous
                             </button>
-                            <span className="text-xs text-slate-400" aria-live="polite">
+                            <span className="text-xs text-muted" aria-live="polite">
                                 Page {validClipPage} of {totalClipPages}
                             </span>
                             <button
@@ -996,7 +996,7 @@ export default function CalendarClient({
                                     )
                                 }
                                 disabled={validClipPage === totalClipPages}
-                                className="rounded-lg border border-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                                className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-semibold text-ink transition hover:border-line-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
                             >
                                 Next
                             </button>
@@ -1006,21 +1006,21 @@ export default function CalendarClient({
 
                 {/* RIGHT MAIN WORKSPACE: Calendar */}
                 <section
-                    aria-label="Monthly Content Schedule"
-                    className="flex min-h-[calc(100vh-73px)] flex-col bg-slate-950"
+                    aria-label="Monthly posting schedule"
+                    className="flex min-h-[calc(100vh-73px)] flex-col bg-page"
                 >
                     {/* Calendar Top Control Bar */}
-                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/90 bg-[#0A0D14] px-6 py-3.5">
+                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line bg-page px-6 py-3.5">
                         {/* Left: Month Title & 44px Touch-Friendly Navigation */}
                         <div className="flex items-center gap-4">
-                            <div className="flex items-center rounded-xl border border-slate-800 bg-slate-900 p-0.5">
+                            <div className="flex items-center rounded-xl border border-line bg-raised p-0.5">
                                 <button
                                     type="button"
                                     onClick={() =>
                                         setCurrentMonth((m) => subMonths(m, 1))
                                     }
                                     aria-label="Previous month"
-                                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink transition hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                                 >
                                     <svg
                                         viewBox="0 0 24 24"
@@ -1036,7 +1036,7 @@ export default function CalendarClient({
                                 <button
                                     type="button"
                                     onClick={() => setCurrentMonth(new Date())}
-                                    className="px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                                    className="px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                                 >
                                     Today
                                 </button>
@@ -1046,7 +1046,7 @@ export default function CalendarClient({
                                         setCurrentMonth((m) => addMonths(m, 1))
                                     }
                                     aria-label="Next month"
-                                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink transition hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                                 >
                                     <svg
                                         viewBox="0 0 24 24"
@@ -1062,15 +1062,15 @@ export default function CalendarClient({
                             </div>
 
                             <div>
-                                <h2 className="text-lg font-bold tracking-tight text-white">
+                                <h2 className="text-lg font-medium font-display tracking-tight text-ink">
                                     {format(currentMonth, "MMMM yyyy")}
                                 </h2>
-                                <p className="text-xs text-slate-400">
-                                    <span className="font-semibold text-slate-200">
+                                <p className="text-xs text-muted">
+                                    <span className="font-semibold text-ink">
                                         {monthMetrics.scheduled}
                                     </span>{" "}
-                                    queued ·{" "}
-                                    <span className="font-semibold text-emerald-400">
+                                    queued,{" "}
+                                    <span className="font-semibold text-success">
                                         {monthMetrics.published}
                                     </span>{" "}
                                     published this month
@@ -1090,9 +1090,9 @@ export default function CalendarClient({
                                     setPlatformFilter("ALL");
                                     setClipPage(1);
                                 }}
-                                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${platformFilter === "ALL"
-                                    ? "border-sky-400/60 bg-sky-400/15 text-sky-200"
-                                    : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${platformFilter === "ALL"
+                                    ? "border-action/60 bg-action/15 text-link"
+                                    : "border-line bg-raised text-muted hover:border-line-strong hover:text-ink"
                                     }`}
                             >
                                 All Channels
@@ -1115,9 +1115,9 @@ export default function CalendarClient({
                                             );
                                             setClipPage(1);
                                         }}
-                                        className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${active
+                                        className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${active
                                             ? meta.activeRing
-                                            : "border-slate-800 bg-slate-900/90 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                                            : "border-line bg-raised/90 text-muted hover:border-line-strong hover:text-ink"
                                             }`}
                                     >
                                         <span className={meta.iconColor}>
@@ -1134,12 +1134,12 @@ export default function CalendarClient({
                     </div>
 
                     {/* Weekday Column Headers */}
-                    <div className="grid grid-cols-7 border-b border-slate-800 bg-slate-900/80 text-center text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    <div className="grid grid-cols-7 border-b border-line bg-raised/80 text-center text-xs font-semibold text-muted">
                         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                             (dayName) => (
                                 <div
                                     key={dayName}
-                                    className="border-r border-slate-800/80 py-2.5 last:border-r-0"
+                                    className="border-r border-line py-2.5 last:border-r-0"
                                 >
                                     {dayName}
                                 </div>
@@ -1190,24 +1190,24 @@ export default function CalendarClient({
             {/* Drag Overlay with Spatial Continuity */}
             <DragOverlay>
                 {activeDrag?.type === "CLIP" && (
-                    <div className="flex w-72 items-center gap-3 rounded-xl border border-sky-400 bg-slate-900/95 p-3 shadow-2xl ring-4 ring-sky-500/20">
-                        <div className="flex h-12 w-9 shrink-0 items-center justify-center rounded-md bg-slate-950 font-mono text-[10px] font-bold text-sky-300">
+                    <div className="flex w-72 items-center gap-3 rounded-xl border border-action bg-raised/95 p-3 shadow-[0_24px_48px_-24px_rgba(14,20,36,0.4)] ring-4 ring-action/20">
+                        <div className="flex h-12 w-9 shrink-0 items-center justify-center rounded-md bg-page tabular-nums text-xs font-semibold text-link">
                             {formatDurationBadge(
                                 activeDrag.clip.durationSeconds,
                             )}
                         </div>
                         <div className="min-w-0 flex-1">
-                            <span className="inline-block rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-sky-300">
+                            <span className="inline-block rounded bg-action/20 px-1.5 py-0.5 text-xs font-semibold text-link">
                                 {activeDrag.clip.thumbnailText}
                             </span>
-                            <p className="mt-1 truncate text-xs font-semibold text-white">
+                            <p className="mt-1 truncate text-xs font-semibold text-ink">
                                 {activeDrag.clip.title}
                             </p>
                         </div>
                     </div>
                 )}
                 {activeDrag?.type === "POST" && (
-                    <div className="flex w-60 items-center gap-2 rounded-lg border border-sky-400 bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-2xl ring-4 ring-sky-500/20">
+                    <div className="flex w-60 items-center gap-2 rounded-lg border border-action bg-raised px-3 py-2 text-xs font-semibold text-ink shadow-[0_24px_48px_-24px_rgba(14,20,36,0.4)] ring-4 ring-action/20">
                         <span
                             className={
                                 PLATFORM_META[activeDrag.post.platform]
@@ -1232,18 +1232,18 @@ export default function CalendarClient({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="schedule-modal-title"
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
                 >
-                    <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-800 bg-[#0A0D14] shadow-2xl">
+                    <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-line bg-page shadow-[0_24px_48px_-24px_rgba(14,20,36,0.4)]">
                         {/* Modal Header */}
-                        <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+                        <div className="flex items-center justify-between border-b border-line px-6 py-4">
                             <div>
-                                <span className="text-[11px] font-semibold uppercase tracking-widest text-sky-400">
+                                <span className="text-xs font-semibold text-link">
                                     Schedule Distribution
                                 </span>
                                 <h3
                                     id="schedule-modal-title"
-                                    className="mt-0.5 text-base font-bold text-white"
+                                    className="mt-0.5 text-base font-semibold text-ink"
                                 >
                                     {modalClip.title}
                                 </h3>
@@ -1252,7 +1252,7 @@ export default function CalendarClient({
                                 type="button"
                                 onClick={() => setIsScheduleModalOpen(false)}
                                 aria-label="Close schedule modal"
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted transition hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                             >
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className="h-4 w-4">
                                     <line x1="18" y1="6" x2="6" y2="18" />
@@ -1266,24 +1266,24 @@ export default function CalendarClient({
                             className="grid grid-cols-1 gap-6 p-6 md:grid-cols-[200px_1fr]"
                         >
                             {/* Left Column: Media Preview */}
-                            <div className="flex flex-col justify-between rounded-xl border border-slate-800 bg-slate-950 p-3">
-                                <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-slate-900">
+                            <div className="flex flex-col justify-between rounded-xl border border-line bg-page p-3">
+                                <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-raised">
                                     {modalClip.previewVideoUrl ? (
                                         <video src={modalClip.previewVideoUrl} poster={modalClip.thumbnailUrl ?? undefined} controls preload="metadata" className="h-full w-full object-cover" />
                                     ) : modalClip.thumbnailUrl ? (
                                         <img src={modalClip.thumbnailUrl} alt={modalClip.title} className="h-full w-full object-cover" />
                                     ) : (
                                         <div className="flex h-full flex-col items-center justify-center p-4 text-center">
-                                            <span className="rounded bg-sky-500/15 px-2 py-1 text-[10px] font-bold text-sky-300">
+                                            <span className="rounded bg-action/15 px-2 py-1 text-xs font-semibold text-link">
                                                 {modalClip.thumbnailText}
                                             </span>
-                                            <p className="mt-2 text-xs text-slate-400">{modalClip.title}</p>
+                                            <p className="mt-2 text-xs text-muted">{modalClip.title}</p>
                                         </div>
                                     )}
                                 </div>
-                                <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
+                                <div className="mt-3 flex items-center justify-between text-xs text-muted">
                                     <span>Duration</span>
-                                    <span className="font-mono font-semibold text-slate-200">
+                                    <span className="tabular-nums font-semibold text-ink">
                                         {formatDurationBadge(modalClip.durationSeconds)}
                                     </span>
                                 </div>
@@ -1293,7 +1293,7 @@ export default function CalendarClient({
                             <div className="space-y-4">
                                 {/* Clip Selector */}
                                 <div>
-                                    <label htmlFor="schedule-clip-select" className="mb-1.5 block text-xs font-semibold text-slate-300">Active Clip</label>
+                                    <label htmlFor="schedule-clip-select" className="mb-1.5 block text-xs font-semibold text-ink">Active clip</label>
                                     <select
                                         id="schedule-clip-select"
                                         value={modalClip.id}
@@ -1304,7 +1304,7 @@ export default function CalendarClient({
                                                 setModalCaption(found.socialCaption || found.title);
                                             }
                                         }}
-                                        className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                        className="block w-full rounded-xl border border-line-strong bg-page px-3 py-2 text-xs text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-focus"
                                     >
                                         {initialClips.map((c) => (
                                             <option key={c.id} value={c.id}>
@@ -1314,11 +1314,11 @@ export default function CalendarClient({
                                     </select>
                                 </div>
 
-                                {/* Target Channels */}
+                                {/* Post to */}
                                 <div>
                                     <div className="mb-1.5 flex items-center justify-between">
-                                        <span className="text-xs font-semibold text-slate-300">Target Channels</span>
-                                        <span className="text-[11px] text-slate-400">{selectedAccountIds.length} selected</span>
+                                        <span className="text-xs font-semibold text-ink">Post to</span>
+                                        <span className="text-xs text-muted">{selectedAccountIds.length} selected</span>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">
                                         {accounts.map((acc) => {
@@ -1330,7 +1330,7 @@ export default function CalendarClient({
                                                     type="button"
                                                     aria-pressed={isSelected}
                                                     onClick={() => toggleAccountSelection(acc.id)}
-                                                    className={`flex min-h-[42px] items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${isSelected ? meta.activeRing : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"}`}
+                                                    className={`flex min-h-[42px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${isSelected ? meta.activeRing : "border-line bg-page text-muted hover:border-line-strong hover:text-ink"}`}
                                                 >
                                                     <span className={meta.iconColor}>
                                                         <PlatformIcon platform={acc.platform} className="h-4 w-4" />
@@ -1340,25 +1340,25 @@ export default function CalendarClient({
                                             );
                                         })}
                                     </div>
-                                    {formError && <p role="alert" className="mt-1.5 text-xs font-medium text-rose-400">{formError}</p>}
+                                    {formError && <p role="alert" className="mt-1.5 text-xs font-medium text-danger">{formError}</p>}
                                 </div>
 
                                 {/* Date & Time + Quick Presets */}
                                 <div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <label className="block">
-                                            <span className="mb-1.5 block text-xs font-semibold text-slate-300">Publish Date</span>
-                                            <input type="date" required value={modalDateString} onChange={(e) => setModalDateString(e.target.value)} className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400" />
+                                            <span className="mb-1.5 block text-xs font-semibold text-ink">Date</span>
+                                            <input type="date" required value={modalDateString} onChange={(e) => setModalDateString(e.target.value)} className="block w-full rounded-xl border border-line-strong bg-page px-3 py-2 text-xs text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-focus" />
                                         </label>
                                         <label className="block">
-                                            <span className="mb-1.5 block text-xs font-semibold text-slate-300">Publish Time</span>
-                                            <input type="time" required value={modalTimeString} onChange={(e) => setModalTimeString(e.target.value)} className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400" />
+                                            <span className="mb-1.5 block text-xs font-semibold text-ink">Time</span>
+                                            <input type="time" required value={modalTimeString} onChange={(e) => setModalTimeString(e.target.value)} className="block w-full rounded-xl border border-line-strong bg-page px-3 py-2 text-xs text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-focus" />
                                         </label>
                                     </div>
                                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                        <span className="mr-1 text-[11px] text-slate-400">Quick slots:</span>
+                                        <span className="mr-1 text-xs text-muted">Quick slots:</span>
                                         {QUICK_TIME_PRESETS.map((preset) => (
-                                            <button key={preset.time} type="button" onClick={() => setModalTimeString(preset.time)} className={`rounded-md border px-2 py-0.5 font-mono text-[11px] transition ${modalTimeString === preset.time ? "border-sky-400/60 bg-sky-400/15 text-sky-300" : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"}`}>
+                                            <button key={preset.time} type="button" onClick={() => setModalTimeString(preset.time)} className={`rounded-md border px-2 py-0.5 tabular-nums text-xs transition ${modalTimeString === preset.time ?"border-sky-400/60 bg-sky-400/15 text-sky-300" : "border-line bg-page text-muted hover:border-line-strong hover:text-ink"}`}>
                                                 {preset.display}
                                             </button>
                                         ))}
@@ -1368,8 +1368,8 @@ export default function CalendarClient({
                                 {/* Caption */}
                                 <div>
                                     <div className="mb-1.5 flex items-center justify-between">
-                                        <label htmlFor="schedule-caption-input" className="text-xs font-semibold text-slate-300">Caption & Hashtags</label>
-                                        <span className="font-mono text-[11px] text-slate-400">{modalCaption.length} / 2200</span>
+                                        <label htmlFor="schedule-caption-input" className="text-xs font-semibold text-ink">Caption and hashtags</label>
+                                        <span className="tabular-nums text-xs text-muted">{modalCaption.length} / 2200</span>
                                     </div>
                                     <textarea
                                         id="schedule-caption-input"
@@ -1378,17 +1378,17 @@ export default function CalendarClient({
                                         value={modalCaption}
                                         onChange={(e) => setModalCaption(e.target.value)}
                                         placeholder="Write a hook and relevant hashtags (#shorts #reels #tiktok)..."
-                                        className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs leading-relaxed text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="block w-full rounded-xl border border-line-strong bg-page p-3 text-xs leading-relaxed text-ink placeholder:text-muted focus:border-action focus:outline-none focus:ring-1 focus:ring-focus disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
                                 </div>
 
                                 {/* Submit Actions */}
-                                <div className="flex items-center justify-end gap-2.5 border-t border-slate-800 pt-4">
-                                    <button type="button" onClick={() => setIsScheduleModalOpen(false)} className="min-h-[40px] rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white">
+                                <div className="flex items-center justify-end gap-2.5 border-t border-line pt-4">
+                                    <button type="button" onClick={() => setIsScheduleModalOpen(false)} className="min-h-[40px] rounded-lg border border-line-strong px-4 py-2 text-xs font-semibold text-ink transition hover:bg-surface hover:text-ink">
                                         Cancel
                                     </button>
-                                    <button type="submit" disabled={isSubmitting} className="min-h-[40px] rounded-xl bg-sky-400 px-5 py-2 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-sky-300 disabled:opacity-50">
-                                        {isSubmitting ? "Queueing Post..." : `Confirm Schedule (${selectedAccountIds.length})`}
+                                    <button type="submit" disabled={isSubmitting} className="min-h-[40px] rounded-lg bg-action px-5 py-2 text-xs font-semibold text-action-ink transition hover:bg-action-hover disabled:opacity-50">
+                                        {isSubmitting ? "Scheduling post" : `Confirm Schedule (${selectedAccountIds.length})`}
                                     </button>
                                 </div>
                             </div>
@@ -1403,9 +1403,9 @@ export default function CalendarClient({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="post-detail-title"
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
                 >
-                    <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+                    <div className="w-full max-w-md rounded-xl border border-line bg-raised p-6 shadow-[0_24px_48px_-24px_rgba(14,20,36,0.4)]">
                         <div className="flex items-center justify-between">
                             <span
                                 className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_META[selectedPost.status].badgeClass
@@ -1421,7 +1421,7 @@ export default function CalendarClient({
                                 type="button"
                                 onClick={() => setSelectedPost(null)}
                                 aria-label="Close post details"
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface hover:text-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                             >
                                 <svg
                                     viewBox="0 0 24 24"
@@ -1439,23 +1439,23 @@ export default function CalendarClient({
 
                         <h3
                             id="post-detail-title"
-                            className="mt-3 text-base font-bold text-white"
+                            className="mt-3 text-base font-semibold text-ink"
                         >
                             {selectedPost.segmentTitle}
                         </h3>
 
                         {/* NEW: LIVE VIDEO LINK BLOCK */}
                         {selectedPost.status === "PUBLISHED" && selectedPost.publishedUrl && (
-                            <div className="mt-4 flex flex-col gap-3 rounded-xl border border-sky-400/20 bg-sky-400/10 p-4">
+                            <div className="mt-4 flex flex-col gap-3 rounded-xl border border-action/20 bg-action/12 p-4">
                                 <div className="flex items-center gap-2">
-                                    <span className="flex h-2.5 w-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]" aria-hidden="true"></span>
-                                    <span className="text-sm font-medium text-sky-400">Successfully Published</span>
+                                    <span className="flex h-2.5 w-2.5 rounded-full bg-action shadow-[0_0_8px_rgba(56,189,248,0.8)]" aria-hidden="true"></span>
+                                    <span className="text-sm font-medium text-link">Published</span>
                                 </div>
                                 <a
                                     href={selectedPost.publishedUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-sky-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-sky-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+                                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-action px-4 py-2.5 text-sm font-semibold text-action-ink transition-colors hover:bg-action-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page"
                                 >
                                     View Live Video
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1467,10 +1467,10 @@ export default function CalendarClient({
                             </div>
                         )}
 
-                        <div className="mt-4 space-y-1.5 rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-xs">
+                        <div className="mt-4 space-y-1.5 rounded-xl border border-line bg-page/70 p-3 text-xs">
                             <div className="flex items-center justify-between">
-                                <span className="text-slate-400">Channel</span>
-                                <span className="inline-flex items-center gap-1.5 font-semibold text-slate-100">
+                                <span className="text-muted">Channel</span>
+                                <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
                                     <span
                                         className={
                                             PLATFORM_META[selectedPost.platform].iconColor
@@ -1486,10 +1486,10 @@ export default function CalendarClient({
                                 </span>
                             </div>
                             <div className="flex items-center justify-between">
-                                <span className="text-slate-400">
+                                <span className="text-muted">
                                     Publish Slot
                                 </span>
-                                <span className="font-mono font-medium text-slate-200">
+                                <span className="tabular-nums font-medium text-ink">
                                     {format(
                                         parseISO(selectedPost.scheduledFor),
                                         "MMM d, yyyy · h:mm a",
@@ -1499,10 +1499,10 @@ export default function CalendarClient({
                         </div>
 
                         <div className="mt-4">
-                            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            <span className="mb-1 block text-xs font-semibold text-muted">
                                 Scheduled Caption
                             </span>
-                            <div className="max-h-32 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs leading-relaxed text-slate-300">
+                            <div className="max-h-32 overflow-y-auto rounded-xl border border-line bg-page p-3 text-xs leading-relaxed text-ink">
                                 {selectedPost.caption || "No caption provided."}
                             </div>
                         </div>
@@ -1515,7 +1515,7 @@ export default function CalendarClient({
                                     onClick={() =>
                                         handleCancelScheduledPost(selectedPost.id)
                                     }
-                                    className="min-h-[38px] rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                                    className="min-h-[38px] rounded-lg border border-danger/40 bg-danger/10 px-3.5 py-2 text-xs font-semibold text-danger transition hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
                                 >
                                     Remove from Queue
                                 </button>
@@ -1525,7 +1525,7 @@ export default function CalendarClient({
                             <button
                                 type="button"
                                 onClick={() => setSelectedPost(null)}
-                                className="min-h-[38px] rounded-xl bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                                className="min-h-[38px] rounded-lg bg-surface px-4 py-2 text-xs font-semibold text-ink transition hover:bg-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-line-strong"
                             >
                                 Done
                             </button>

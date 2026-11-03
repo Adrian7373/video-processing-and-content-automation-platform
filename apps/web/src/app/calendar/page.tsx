@@ -128,7 +128,7 @@ export default async function CalendarPage() {
     }));
 
     return (
-        <main className="bg-[#0A0D14] text-slate-100">
+        <main className="bg-page text-ink">
             <CalendarClient
                 initialClips={serializedClips}
                 initialPosts={serializedPosts}

@@ -1,16 +1,27 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Mono, Funnel_Display, Funnel_Sans } from "next/font/google";
 import "./globals.css";
 import AppChrome from "./components/AppChrome";
+import { ThemeSync } from "@/lib/theme";
+import { THEME_BOOT_SCRIPT } from "@/lib/themeScript";
 
-const geistSans = Geist({
-    variable: "--font-geist-sans",
+const funnelDisplay = Funnel_Display({
     subsets: ["latin"],
+    variable: "--ds-font-display",
+    display: "swap",
 });
 
-const geistMono = Geist_Mono({
-    variable: "--font-geist-mono",
+const funnelSans = Funnel_Sans({
     subsets: ["latin"],
+    variable: "--ds-font-text",
+    display: "swap",
+});
+
+const dmMono = DM_Mono({
+    subsets: ["latin"],
+    weight: ["400", "500"],
+    variable: "--ds-font-mono",
+    display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -31,10 +42,19 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en" className="dark">
-            <body
-                className={`${geistSans.variable} ${geistMono.variable} bg-[#0A0D14] text-slate-100 antialiased`}
-            >
+        // data-theme is set before paint by THEME_BOOT_SCRIPT, so the server
+        // and client attributes legitimately differ.
+        <html
+            lang="en"
+            data-theme="system"
+            suppressHydrationWarning
+            className={`${funnelDisplay.variable} ${funnelSans.variable} ${dmMono.variable}`}
+        >
+            <head>
+                <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+            </head>
+            <body className="bg-page text-ink antialiased">
+                <ThemeSync />
                 <AppChrome>{children}</AppChrome>
             </body>
         </html>

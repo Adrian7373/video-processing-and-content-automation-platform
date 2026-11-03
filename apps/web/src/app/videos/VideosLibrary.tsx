@@ -91,13 +91,24 @@ export default function VideosLibrary({
     }
 
     return (
-        <div className="min-h-full bg-[#0A0D14] px-6 py-10 text-slate-100 sm:px-10">
+        <div className="min-h-full bg-page px-6 py-10 text-ink sm:px-10">
             <div className="mx-auto max-w-7xl">
                 {/* Header */}
-                <header className="mb-7">
-                    <h1 className="text-lg font-semibold tracking-tight text-slate-200">
-                        Projects
-                    </h1>
+                <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
+                    <div className="max-w-[62ch]">
+                        <h1 className="font-display text-[32px] font-medium leading-tight tracking-[-0.025em] text-ink">
+                            My projects
+                        </h1>
+                        <p className="mt-2 text-base text-muted">
+                            Every video you upload and the clips made from it. Open one to review, edit and schedule its clips.
+                        </p>
+                    </div>
+                    <Link
+                        href="/"
+                        className="inline-flex h-11 items-center gap-2 rounded-lg bg-action px-5 text-base font-medium text-action-ink transition hover:bg-action-hover active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page"
+                    >
+                        Upload a video
+                    </Link>
                 </header>
 
                 {/* Projects Grid */}
@@ -107,9 +118,9 @@ export default function VideosLibrary({
                         <Link
                             href="/"
                             aria-label="Upload new video"
-                            className="group relative flex aspect-video w-full flex-col items-center justify-center gap-2.5 rounded-2xl border border-dashed border-slate-800 bg-slate-900/60 text-slate-400 transition duration-200 hover:border-sky-400/50 hover:bg-slate-900 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                            className="group relative flex aspect-video w-full flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed border-line bg-surface text-muted transition duration-200 hover:border-action hover:bg-action/12 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                         >
-                            <span className="flex h-11 w-11 items-center justify-center rounded-full text-slate-400 transition-transform duration-200 group-hover:scale-105 group-hover:text-sky-400">
+                            <span className="flex h-11 w-11 items-center justify-center rounded-full text-muted transition-transform duration-200 group-hover:scale-105 group-hover:text-link">
                                 <svg
                                     viewBox="0 0 24 24"
                                     fill="none"
@@ -162,8 +173,8 @@ export default function VideosLibrary({
                                             router.push(`/videos/${video.id}`);
                                         }
                                     }}
-                                    className={`relative aspect-video w-full overflow-hidden rounded-2xl border border-slate-800/90 bg-slate-950 transition duration-200 ${isCompleted
-                                        ? "cursor-pointer hover:border-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                                    className={`relative aspect-video w-full overflow-hidden rounded-xl border border-line bg-page transition duration-200 ${isCompleted
+                                        ? "cursor-pointer hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                                         : "cursor-default"
                                         }`}
                                 >
@@ -184,12 +195,12 @@ export default function VideosLibrary({
                                             />
                                         </>
                                     ) : (
-                                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-slate-900/80 to-slate-950">
-                                            <div className="flex h-36 w-20 flex-col items-center justify-center rounded-lg border border-slate-800/90 bg-slate-900/90 shadow-inner">
+                                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-raised/80 to-page">
+                                            <div className="flex h-36 w-20 flex-col items-center justify-center rounded-lg border border-line bg-raised/90 shadow-inner">
                                                 {isProcessing ? (
-                                                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-sky-400 border-t-transparent" aria-hidden="true" />
+                                                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-action border-t-transparent" aria-hidden="true" />
                                                 ) : (
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" className="h-6 w-6 text-slate-500">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" className="h-6 w-6 text-muted">
                                                         <polygon points="5 3 19 12 5 21 5 3" />
                                                     </svg>
                                                 )}
@@ -198,8 +209,8 @@ export default function VideosLibrary({
                                     )}
 
                                     {isProcessing && (
-                                        <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-2 bg-slate-950/90 px-3 py-1.5 text-xs font-medium text-amber-300 backdrop-blur-sm">
-                                            <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" aria-hidden="true" />
+                                        <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-2 bg-page/90 px-3 py-1.5 text-xs font-medium text-link">
+                                            <span className="h-2 w-2 animate-pulse rounded-full bg-action" aria-hidden="true" />
                                             <span>
                                                 {video.status === "UPLOADING"
                                                     ? "Uploading video..."
@@ -211,15 +222,15 @@ export default function VideosLibrary({
                                     )}
 
                                     {isFailed && (
-                                        <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between gap-2 bg-slate-950/95 px-3 py-1.5 text-xs backdrop-blur-sm">
-                                            <span className="truncate font-medium text-rose-400" title={video.errorMessage ?? "Processing failed"}>
+                                        <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between gap-2 bg-page/95 px-3 py-1.5 text-xs">
+                                            <span className="truncate font-medium text-danger" title={video.errorMessage ?? "Processing failed"}>
                                                 Processing failed
                                             </span>
                                             <button
                                                 type="button"
                                                 onClick={(e) => void retry(e, video.id)}
                                                 disabled={retrying === video.id}
-                                                className="shrink-0 rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-950 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:opacity-50"
+                                                className="shrink-0 rounded-md bg-ink px-2.5 py-1 text-xs font-semibold text-page transition hover:bg-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
                                             >
                                                 {retrying === video.id ? "Retrying..." : "Retry"}
                                             </button>
@@ -229,9 +240,9 @@ export default function VideosLibrary({
 
                                 {/* Minimal Metadata Underneath */}
                                 <div className="mt-3 flex items-start justify-between gap-2 px-0.5">
-                                    <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug text-slate-100">
+                                    <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug text-ink">
                                         {isCompleted ? (
-                                            <Link href={`/videos/${video.id}`} className="hover:text-sky-400 focus-visible:outline-none focus-visible:underline" title={displayTitle}>
+                                            <Link href={`/videos/${video.id}`} className="hover:text-link focus-visible:outline-none focus-visible:underline" title={displayTitle}>
                                                 {displayTitle}
                                             </Link>
                                         ) : (
@@ -240,7 +251,7 @@ export default function VideosLibrary({
                                     </h2>
 
                                     {isCompleted && (
-                                        <Link href={`/videos/${video.id}`} aria-label={`Open ${displayTitle} options`} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-900 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400">
+                                        <Link href={`/videos/${video.id}`} aria-label={`Open ${displayTitle} options`} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                                             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="h-4 w-4">
                                                 <circle cx="5" cy="12" r="1.75" />
                                                 <circle cx="12" cy="12" r="1.75" />
@@ -250,9 +261,9 @@ export default function VideosLibrary({
                                     )}
                                 </div>
 
-                                <div className="mt-1 flex items-center gap-2 px-0.5 text-xs text-slate-400 tabular-nums">
+                                <div className="mt-1 flex items-center gap-2 px-0.5 text-xs text-muted tabular-nums">
                                     <span>{clipCount} {clipCount === 1 ? "clip" : "clips"}</span>
-                                    <span aria-hidden="true" className="text-slate-700">|</span>
+                                    <span aria-hidden="true" className="text-muted">|</span>
                                     <span>{formattedDate}</span>
                                 </div>
                             </article>
@@ -262,38 +273,38 @@ export default function VideosLibrary({
 
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
-                    <nav aria-label="Pagination navigation" className="mt-12 flex items-center justify-between border-t border-slate-800/80 pt-6">
+                    <nav aria-label="Pagination navigation" className="mt-12 flex items-center justify-between border-t border-line pt-6">
                         {currentPage > 1 ? (
                             <Link
                                 href={`/videos?page=${currentPage - 1}`}
-                                className="inline-flex min-h-[38px] items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                                className="inline-flex min-h-[38px] items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-xs font-semibold text-ink transition hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                             >
-                                <ChevronLeft className="h-4 w-4 text-slate-400" />
+                                <ChevronLeft className="h-4 w-4 text-muted" />
                                 Previous
                             </Link>
                         ) : (
-                            <span className="inline-flex min-h-[38px] items-center gap-2 rounded-xl border border-slate-800/50 bg-transparent px-4 py-2 text-xs font-semibold text-slate-600 cursor-not-allowed">
-                                <ChevronLeft className="h-4 w-4 text-slate-700" />
+                            <span className="inline-flex min-h-[38px] items-center gap-2 rounded-lg border border-line bg-transparent px-4 py-2 text-xs font-semibold text-muted cursor-not-allowed">
+                                <ChevronLeft className="h-4 w-4 text-muted" />
                                 Previous
                             </span>
                         )}
 
-                        <div className="text-[13px] font-medium text-slate-500">
-                            Page <span className="text-slate-200">{currentPage}</span> of <span className="text-slate-200">{totalPages}</span>
+                        <div className="text-[13px] font-medium text-muted">
+                            Page <span className="text-ink">{currentPage}</span> of <span className="text-ink">{totalPages}</span>
                         </div>
 
                         {currentPage < totalPages ? (
                             <Link
                                 href={`/videos?page=${currentPage + 1}`}
-                                className="inline-flex min-h-[38px] items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                                className="inline-flex min-h-[38px] items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-xs font-semibold text-ink transition hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                             >
                                 Next
-                                <ChevronRight className="h-4 w-4 text-slate-400" />
+                                <ChevronRight className="h-4 w-4 text-muted" />
                             </Link>
                         ) : (
-                            <span className="inline-flex min-h-[38px] items-center gap-2 rounded-xl border border-slate-800/50 bg-transparent px-4 py-2 text-xs font-semibold text-slate-600 cursor-not-allowed">
+                            <span className="inline-flex min-h-[38px] items-center gap-2 rounded-lg border border-line bg-transparent px-4 py-2 text-xs font-semibold text-muted cursor-not-allowed">
                                 Next
-                                <ChevronRight className="h-4 w-4 text-slate-700" />
+                                <ChevronRight className="h-4 w-4 text-muted" />
                             </span>
                         )}
                     </nav>

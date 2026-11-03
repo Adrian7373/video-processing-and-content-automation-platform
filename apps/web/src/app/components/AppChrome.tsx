@@ -19,7 +19,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
     }
 
     return (
-        <div className="flex min-h-screen w-full bg-[#0A0D14]">
+        <div className="flex min-h-screen w-full bg-page">
             <AppSidebar />
             <div className="flex min-w-0 flex-1 flex-col">
                 <TopNav />

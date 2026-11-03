@@ -47,7 +47,11 @@ Before you call a change done, run the checks that apply to it:
   - **Final-attempt check:** BullMQ's `job.attemptsMade` counts *finished* attempts, so the current attempt is the last one when `attemptsMade + 1 >= attempts`.
   - **Unrecoverable errors:** throw `UnrecoverableError` for failures a retry can't fix (no audio, too long, file missing, bad payload) so BullMQ doesn't retry them.
   - **Credits:** a retry costs a credit like a first run. Failed runs are always refunded.
-- **UI:** use a dark theme only (`#0A0D14` / `slate-950` backgrounds, subtle slate borders, dark surfaces) on every page, modal, and input. Never add unstyled light-mode controls. Icons come from `lucide-react`.
+- **UI (design system):** the reference is `/designsystem` (`apps/web/src/app/designsystem`).
+  - **Theming:** every page supports light, dark and auto. Use the semantic Tailwind tokens from `globals.css` (`bg-page`, `bg-surface`, `bg-raised`, `text-ink`, `text-muted`, `border-line`, `border-line-strong`, `bg-action` + `text-action-ink`, `text-link`, `ring-focus`, `text-success`, `text-danger`, `text-info`, `bg-overlay`). Never hard-code hex colours or `slate-*`/`sky-*` classes. The theme lives on `<html data-theme>`, set before paint by `THEME_BOOT_SCRIPT` and changed only through `useTheme()` from `@/lib/theme`.
+  - **Type:** headings use Funnel Display at weight 500 (`font-display`), text uses Funnel Sans, and DM Mono is only for timecodes. Nothing is smaller than 13px. Use sentence case everywhere; no ALL CAPS labels.
+  - **Buttons:** one filled orange button (the main action) per view; secondary buttons are outlined. Controls are 44px tall with 8px corners; panels use 12px corners, video frames 20px.
+  - **Surfaces:** cards use hairline borders, not shadows. Only modals get the soft shadow.
 
 ## 5. Invariants: do not regress
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { Fragment, useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import {
     AlertCircle,
@@ -14,59 +14,7 @@ import {
     Trash2,
     Upload,
 } from "lucide-react";
-
-/* ------------------------------------------------------------------ */
-/* Theme store: light | dark | system, persisted per viewer            */
-/* ------------------------------------------------------------------ */
-
-type ThemeMode = "light" | "dark" | "system";
-const THEME_KEY = "sm-theme";
-const THEME_EVENT = "sm-theme-change";
-
-function readTheme(): ThemeMode {
-    try {
-        const stored = window.localStorage.getItem(THEME_KEY);
-        if (stored === "light" || stored === "dark" || stored === "system") return stored;
-    } catch {
-        // Storage can be blocked (private mode); fall back to the system setting.
-    }
-    return "system";
-}
-
-function writeTheme(mode: ThemeMode) {
-    try {
-        window.localStorage.setItem(THEME_KEY, mode);
-    } catch {
-        // Ignore: the choice still applies for this visit.
-    }
-    window.dispatchEvent(new Event(THEME_EVENT));
-}
-
-function subscribeTheme(callback: () => void) {
-    window.addEventListener(THEME_EVENT, callback);
-    window.addEventListener("storage", callback);
-    return () => {
-        window.removeEventListener(THEME_EVENT, callback);
-        window.removeEventListener("storage", callback);
-    };
-}
-
-function subscribeSystemDark(callback: () => void) {
-    const query = window.matchMedia("(prefers-color-scheme: dark)");
-    query.addEventListener("change", callback);
-    return () => query.removeEventListener("change", callback);
-}
-
-function useTheme() {
-    const mode = useSyncExternalStore(subscribeTheme, readTheme, () => "system" as ThemeMode);
-    const systemDark = useSyncExternalStore(
-        subscribeSystemDark,
-        () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-        () => false,
-    );
-    const resolved: "light" | "dark" = mode === "system" ? (systemDark ? "dark" : "light") : mode;
-    return { mode, resolved, setMode: writeTheme };
-}
+import { useTheme, type ThemeMode } from "@/lib/theme";
 
 /* ------------------------------------------------------------------ */
 /* Tokens shown on the page (mirrors designsystem.css)                 */
@@ -287,7 +235,7 @@ function ClipTimeline() {
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
 
-export default function DesignSystem({ fontClassName }: { fontClassName: string }) {
+export default function DesignSystem() {
     const { mode, resolved, setMode } = useTheme();
     const [activeId, setActiveId] = useState<string>("colour");
     const [captions, setCaptions] = useState(true);
@@ -331,7 +279,7 @@ export default function DesignSystem({ fontClassName }: { fontClassName: string 
     ];
 
     return (
-        <div className={`ds ${fontClassName}`} data-theme={mode}>
+        <div className="ds" data-theme={mode}>
             <header className="ds-nav">
                 <div className="ds-nav__inner">
                     <Link href="/designsystem" className="ds-brand">

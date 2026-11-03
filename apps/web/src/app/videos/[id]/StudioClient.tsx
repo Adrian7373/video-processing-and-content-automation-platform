@@ -80,37 +80,37 @@ const PLATFORM_META: Record<
         label: "YouTube Shorts",
         shortLabel: "Shorts",
         pillSurface:
-            "bg-slate-900/95 border-slate-800 hover:border-rose-500/50 text-slate-100",
-        accentBar: "bg-rose-500",
-        iconColor: "text-rose-400",
-        activeRing: "border-rose-500/60 bg-rose-500/10 text-white",
+            "bg-raised/95 border-line hover:border-danger/50 text-ink",
+        accentBar: "bg-danger",
+        iconColor: "text-danger",
+        activeRing: "border-danger/60 bg-danger/10 text-page",
     },
     TIKTOK: {
         label: "TikTok",
         shortLabel: "TikTok",
         pillSurface:
-            "bg-slate-900/95 border-slate-800 hover:border-cyan-400/50 text-slate-100",
+            "bg-raised/95 border-line hover:border-cyan-400/50 text-ink",
         accentBar: "bg-cyan-400",
-        iconColor: "text-cyan-300",
-        activeRing: "border-cyan-400/60 bg-cyan-400/10 text-white",
+        iconColor: "text-cyan-700 dark:text-cyan-300",
+        activeRing: "border-cyan-400/60 bg-cyan-400/10 text-ink",
     },
     INSTAGRAM_REELS: {
         label: "Instagram Reels",
         shortLabel: "Reels",
         pillSurface:
-            "bg-slate-900/95 border-slate-800 hover:border-pink-500/50 text-slate-100",
+            "bg-raised/95 border-line hover:border-pink-500/50 text-ink",
         accentBar: "bg-pink-500",
-        iconColor: "text-pink-400",
-        activeRing: "border-pink-500/60 bg-pink-500/10 text-white",
+        iconColor: "text-pink-700 dark:text-pink-400",
+        activeRing: "border-pink-500/60 bg-pink-500/10 text-ink",
     },
     FACEBOOK_REELS: {
         label: "Facebook Reels",
         shortLabel: "FB Reels",
         pillSurface:
-            "bg-slate-900/95 border-slate-800 hover:border-blue-500/50 text-slate-100",
+            "bg-raised/95 border-line hover:border-blue-500/50 text-ink",
         accentBar: "bg-blue-500",
-        iconColor: "text-blue-400",
-        activeRing: "border-blue-500/60 bg-blue-500/10 text-white",
+        iconColor: "text-blue-700 dark:text-blue-400",
+        activeRing: "border-blue-500/60 bg-blue-500/10 text-ink",
     },
 };
 
@@ -120,28 +120,28 @@ const STATUS_META: Record<
 > = {
     SCHEDULED: {
         label: "Scheduled",
-        badgeClass: "border-amber-400/30 bg-amber-400/10 text-amber-300",
-        dotClass: "bg-amber-400",
+        badgeClass: "border-action/30 bg-action/15 text-link",
+        dotClass: "bg-action",
     },
     PUBLISHING: {
         label: "Publishing",
-        badgeClass: "border-sky-400/30 bg-sky-400/10 text-sky-300",
-        dotClass: "bg-sky-400 animate-ping",
+        badgeClass: "border-action/30 bg-action/12 text-link",
+        dotClass: "bg-action animate-ping",
     },
     PUBLISHED: {
         label: "Published",
-        badgeClass: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
-        dotClass: "bg-emerald-400",
+        badgeClass: "border-success/30 bg-success/10 text-success",
+        dotClass: "bg-success",
     },
     FAILED: {
         label: "Failed",
-        badgeClass: "border-rose-500/30 bg-rose-500/10 text-rose-300",
-        dotClass: "bg-rose-500",
+        badgeClass: "border-danger/30 bg-danger/10 text-danger",
+        dotClass: "bg-danger",
     },
     CANCELLED: {
         label: "Cancelled",
-        badgeClass: "border-slate-700 bg-slate-800/60 text-slate-400",
-        dotClass: "bg-slate-500",
+        badgeClass: "border-line-strong bg-surface text-muted",
+        dotClass: "bg-muted",
     },
 };
 
@@ -435,16 +435,16 @@ export default function StudioClient({ videoId }: { videoId: string }) {
 
     if (error || !video) {
         return (
-            <div className="flex min-h-screen items-center justify-center bg-slate-950 p-10 text-slate-100">
-                <div className="max-w-md rounded-2xl border border-rose-500/30 bg-slate-900 p-6 text-center shadow-xl">
-                    <p className="text-sm font-semibold text-rose-300">
+            <div className="flex min-h-screen items-center justify-center bg-page p-10 text-ink">
+                <div className="max-w-md rounded-xl border border-danger/30 bg-raised p-6 text-center shadow-[0_24px_48px_-24px_rgba(14,20,36,0.4)]">
+                    <p className="text-sm font-semibold text-danger">
                         {error ?? "Video not found."}
                     </p>
                     <a
                         href="/videos"
-                        className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                        className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-surface px-4 py-2 text-xs font-semibold text-ink transition hover:bg-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     >
-                        ← Back to Video Library
+                        ← Back to my projects
                     </a>
                 </div>
             </div>
@@ -453,18 +453,18 @@ export default function StudioClient({ videoId }: { videoId: string }) {
 
     if (video.status !== "COMPLETED") {
         return (
-            <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-center text-slate-100">
-                <div className="max-w-md rounded-2xl border border-slate-800 bg-slate-900/80 p-8 shadow-2xl">
+            <div className="flex min-h-screen items-center justify-center bg-page px-6 text-center text-ink">
+                <div className="max-w-md rounded-xl border border-line bg-raised/80 p-8 shadow-[0_24px_48px_-24px_rgba(14,20,36,0.4)]">
                     <div
-                        className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-2 border-slate-700 border-t-sky-400"
+                        className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-2 border-line-strong border-t-action"
                         aria-hidden="true"
                     />
-                    <h1 className="text-lg font-bold text-white">
+                    <h1 className="text-lg font-medium font-display text-ink">
                         Preparing your Clip Studio
                     </h1>
-                    <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                    <p className="mt-2 text-xs leading-relaxed text-muted">
                         Live status:{" "}
-                        <span className="font-mono font-semibold text-sky-400">
+                        <span className="tabular-nums font-semibold text-link">
                             {video.status}
                         </span>
                         . Extracting viral segments, burning captions, and generating
@@ -490,29 +490,29 @@ export default function StudioClient({ videoId }: { videoId: string }) {
     );
 
     return (
-        <main className="bg-[#0A0D14] text-slate-100 ">
+        <main className="bg-page text-ink">
 
             {/* 3-COLUMN STUDIO WORKSPACE */}
             <div className="mx-auto grid max-w-[1600px] grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)_380px]">
                 {/* LEFT PANE: Segment Library with Generated Thumbnails */}
                 <aside
-                    aria-label="Extracted Video Segments"
-                    className="flex flex-col border-b border-slate-800/90 bg-[#0A0D14] lg:h-[calc(100vh-69px)] lg:border-b-0 lg:border-r"
+                    aria-label="Clips from this video"
+                    className="flex flex-col border-b border-line bg-page lg:h-[calc(100vh-69px)] lg:border-b-0 lg:border-r"
                 >
-                    <div className="border-b border-slate-800/90 p-4">
+                    <div className="border-b border-line p-4">
                         <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
-                                <h2 className="text-sm font-semibold tracking-tight text-slate-100">
+                                <h2 className="text-sm font-semibold tracking-tight text-ink">
                                     Extracted Clips
                                 </h2>
                                 <span
                                     aria-live="polite"
-                                    className="rounded-full border border-slate-700 bg-[#0A0D14] px-2 py-0.5 font-mono text-xs font-medium text-slate-300"
+                                    className="rounded-full border border-line-strong bg-page px-2 py-0.5 tabular-nums text-xs font-medium text-ink"
                                 >
                                     {filteredSegments.length}
                                 </span>
                             </div>
-                            <span className="text-[11px] text-slate-400">
+                            <span className="text-xs text-muted">
                                 Select to preview
                             </span>
                         </div>
@@ -525,7 +525,7 @@ export default function StudioClient({ videoId }: { videoId: string }) {
                                 stroke="currentColor"
                                 strokeWidth="2"
                                 aria-hidden="true"
-                                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
+                                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
                             >
                                 <circle cx="11" cy="11" r="8" />
                                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -536,7 +536,7 @@ export default function StudioClient({ videoId }: { videoId: string }) {
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 aria-label="Search extracted clips"
                                 placeholder="Filter by clip title or hook..."
-                                className="block w-full rounded-xl border border-slate-800 bg-[#0A0D14] py-2 pl-9 pr-3 text-xs text-slate-100 placeholder:text-slate-500 transition focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                className="block w-full rounded-xl border border-line bg-page py-2 pl-9 pr-3 text-xs text-ink placeholder:text-muted transition focus:border-action focus:outline-none focus:ring-1 focus:ring-focus"
                             />
                         </div>
                     </div>
@@ -567,8 +567,8 @@ export default function StudioClient({ videoId }: { videoId: string }) {
 
                 {/* CENTER PANE: Video Player & Primary Actions */}
                 <section
-                    aria-label="Video Clip Preview"
-                    className="flex flex-col items-center justify-between border-b border-slate-800/90 bg-[#0A0D14] p-6 lg:h-[calc(100vh-69px)] lg:overflow-y-auto lg:border-b-0 lg:border-r lg:p-8"
+                    aria-label="Clip preview"
+                    className="flex flex-col items-center justify-between border-b border-line bg-page p-6 lg:h-[calc(100vh-69px)] lg:overflow-y-auto lg:border-b-0 lg:border-r lg:p-8"
                 >
                     {active && (
                         <Workspace
@@ -581,7 +581,7 @@ export default function StudioClient({ videoId }: { videoId: string }) {
                     )}
                 </section>
 
-                {/* RIGHT PANE: Insights & Publish Queue */}
+                {/* RIGHT PANE: Insights & Scheduled posts */}
                 <InsightsPanel
                     segment={active}
                     tab={tab}
@@ -653,13 +653,13 @@ function SegmentListCard({
                     onSelect();
                 }
             }}
-            className={`group relative flex cursor-pointer gap-3.5 rounded-xl border p-3 text-left shadow-sm transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${isSelected
-                ? "border-sky-400/70 bg-sky-500/10 ring-1 ring-sky-400/30"
-                : "border-slate-800/90 bg-[#0A0D14] hover:border-slate-700"
+            className={`group relative flex cursor-pointer gap-3.5 rounded-xl border p-3 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${isSelected
+                ? "border-action/70 bg-action/12 ring-1 ring-action/30"
+                : "border-line bg-page hover:border-line-strong"
                 }`}
         >
             {/* Reserved 9:16 Media Thumbnail Container (Prevents CLS) */}
-            <div className="relative h-24 w-16 shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-[#0A0D14]">
+            <div className="relative h-24 w-16 shrink-0 overflow-hidden rounded-lg border border-line bg-page">
                 {segment.thumbnailUrl ? (
                     <img
                         src={segment.thumbnailUrl}
@@ -668,14 +668,14 @@ function SegmentListCard({
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
                 ) : (
-                    <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-b from-slate-900 to-slate-950 p-1.5 text-center">
+                    <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-b from-raised to-page p-1.5 text-center">
                         <svg
                             viewBox="0 0 24 24"
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="1.75"
                             aria-hidden="true"
-                            className="h-5 w-5 text-slate-600 transition-colors group-hover:text-sky-400"
+                            className="h-5 w-5 text-muted transition-colors group-hover:text-link"
                         >
                             <polygon points="5 3 19 12 5 21 5 3" />
                         </svg>
@@ -683,12 +683,12 @@ function SegmentListCard({
                 )}
 
                 {/* Clip Index Badge */}
-                <span className="absolute left-1 top-1 rounded bg-[#0A0D14] px-1 py-0.5 font-mono text-[9px] font-bold text-sky-400">
+                <span className="absolute left-1 top-1 rounded bg-page px-1 py-0.5 tabular-nums text-xs font-semibold text-link">
                     #{String(index + 1).padStart(2, "0")}
                 </span>
 
                 {/* Duration Overlay */}
-                <span className="absolute bottom-1 right-1 rounded bg-slate-950/90 px-1 py-0.5 font-mono text-[10px] font-medium text-slate-200">
+                <span className="absolute bottom-1 right-1 rounded bg-page/90 px-1 py-0.5 tabular-nums text-xs font-medium text-ink">
                     {formatDurationBadge(clipDuration)}
                 </span>
             </div>
@@ -697,35 +697,35 @@ function SegmentListCard({
             <div className="flex min-w-0 flex-1 flex-col justify-between">
                 <div>
                     <div className="flex items-center justify-between gap-1.5">
-                        <span className="truncate rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
+                        <span className="truncate rounded bg-action/12 px-1.5 py-0.5 text-xs font-semibold text-link">
                             {segment.thumbnailText || "HIGHLIGHT"}
                         </span>
-                        <span className="shrink-0 font-mono text-[10px] text-slate-400">
+                        <span className="shrink-0 tabular-nums text-xs text-muted">
                             {timestamp(segment.startTime)}–{timestamp(segment.endTime)}
                         </span>
                     </div>
 
-                    <h3 className="mt-1.5 line-clamp-2 text-xs font-semibold leading-snug text-slate-100">
+                    <h3 className="mt-1.5 line-clamp-2 text-xs font-semibold leading-snug text-ink">
                         {segment.title}
                     </h3>
                 </div>
 
                 {/* Metadata & Quick Schedule Row */}
-                <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-800/80 pt-2">
-                    <div className="flex flex-wrap items-center gap-1 text-[10px]">
-                        <span className="rounded bg-[#0A0D14] px-1.5 py-0.5 font-mono text-slate-300">
+                <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-line pt-2">
+                    <div className="flex flex-wrap items-center gap-1 text-xs">
+                        <span className="rounded bg-page px-1.5 py-0.5 tabular-nums text-ink">
                             {ratioLabel}
                         </span>
                         {segment.captionedClipUrl && (
                             <span
                                 title="Burned-in subtitles included"
-                                className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-300"
+                                className="rounded bg-success/10 px-1.5 py-0.5 font-medium text-success"
                             >
                                 CC
                             </span>
                         )}
                         {activeScheduledCount > 0 && (
-                            <span className="rounded bg-amber-400/10 px-1.5 py-0.5 font-medium text-amber-300">
+                            <span className="rounded bg-action/15 px-1.5 py-0.5 font-medium text-link">
                                 {activeScheduledCount}× queued
                             </span>
                         )}
@@ -738,7 +738,7 @@ function SegmentListCard({
                             onQuickSchedule();
                         }}
                         aria-label={`Schedule ${segment.title}`}
-                        className="inline-flex min-h-[28px] items-center gap-1 rounded-lg border border-slate-700 bg-[#0A0D14] px-2 py-1 text-[11px] font-medium text-slate-100 transition hover:border-sky-400/60 hover:bg-sky-400 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                        className="inline-flex min-h-[28px] items-center gap-1 rounded-lg border border-line-strong bg-page px-2 py-1 text-xs font-medium text-ink transition hover:border-action/60 hover:bg-action hover:text-action-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     >
                         <svg
                             viewBox="0 0 24 24"
@@ -787,25 +787,25 @@ function Workspace({
     return (
         <div className="flex w-full max-w-3xl flex-col items-center">
             {/* Top Player Bar */}
-            <div className="mb-4 flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800/90 bg-[#0A0D14] px-4 py-2.5">
+            <div className="mb-4 flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-page px-4 py-2.5">
                 <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                        <span className="truncate text-xs font-semibold text-slate-100">
+                        <span className="truncate text-xs font-semibold text-ink">
                             {segment.title}
                         </span>
-                        <span className="shrink-0 rounded bg-[#0A0D14] px-1.5 py-0.5 font-mono text-[10px] text-slate-300">
+                        <span className="shrink-0 rounded bg-page px-1.5 py-0.5 tabular-nums text-xs text-ink">
                             {timestamp(segment.startTime)} – {timestamp(segment.endTime)}
                         </span>
                     </div>
                 </div>
 
                 {segment.captionedClipUrl && (
-                    <label className="inline-flex cursor-pointer select-none items-center gap-2 text-xs font-medium text-slate-300 hover:text-white">
+                    <label className="inline-flex cursor-pointer select-none items-center gap-2 text-xs font-medium text-ink hover:text-ink">
                         <input
                             type="checkbox"
                             checked={captioned}
                             onChange={(event) => setCaptioned(event.target.checked)}
-                            className="h-4 w-4 rounded border-slate-700 bg-[#0A0D14] text-sky-400 focus:ring-2 focus:ring-sky-400 focus:ring-offset-0"
+                            className="h-4 w-4 rounded border-line-strong bg-page text-link focus:ring-2 focus:ring-focus focus:ring-offset-0"
                         />
                         Burned-in Captions (CC)
                     </label>
@@ -814,7 +814,7 @@ function Workspace({
 
             {/* Video Container */}
             <div
-                className={`relative flex w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-800 bg-[#0A0D14] shadow-2xl ${aspectClasses[aspectRatio]}`}
+                className={`relative flex w-full items-center justify-center overflow-hidden rounded-xl border border-line bg-page shadow-[0_24px_48px_-24px_rgba(14,20,36,0.4)] ${aspectClasses[aspectRatio]}`}
             >
                 <video
                     key={source ?? "empty"}
@@ -827,12 +827,12 @@ function Workspace({
             </div>
 
             {/* Bottom Action Bar */}
-            <div className="mt-5 flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800/90 bg-[#0A0D14] p-3">
+            <div className="mt-5 flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-page p-3">
                 <div className="flex flex-wrap items-center gap-2">
                     <a
                         href={source ?? "#"}
                         download
-                        className="inline-flex min-h-[38px] items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-600 hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                        className="inline-flex min-h-[38px] items-center gap-2 rounded-lg border border-line-strong bg-raised px-3.5 py-2 text-xs font-semibold text-ink transition hover:border-line-strong hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     >
                         <svg
                             viewBox="0 0 24 24"
@@ -840,7 +840,7 @@ function Workspace({
                             stroke="currentColor"
                             strokeWidth="2"
                             aria-hidden="true"
-                            className="h-3.5 w-3.5 text-sky-400"
+                            className="h-3.5 w-3.5 text-link"
                         >
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                             <polyline points="7 10 12 15 17 10" />
@@ -852,7 +852,7 @@ function Workspace({
                     <button
                         type="button"
                         onClick={() => void handleCopyCaption()}
-                        className="inline-flex min-h-[38px] items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-600 hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                        className="inline-flex min-h-[38px] items-center gap-2 rounded-lg border border-line-strong bg-raised px-3.5 py-2 text-xs font-semibold text-ink transition hover:border-line-strong hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     >
                         <svg
                             viewBox="0 0 24 24"
@@ -860,19 +860,19 @@ function Workspace({
                             stroke="currentColor"
                             strokeWidth="2"
                             aria-hidden="true"
-                            className="h-3.5 w-3.5 text-slate-400"
+                            className="h-3.5 w-3.5 text-muted"
                         >
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                         </svg>
-                        {copied ? "Copied!" : "Copy Caption"}
+                        {copied ? "Copied" : "Copy caption"}
                     </button>
                 </div>
 
                 <button
                     type="button"
                     onClick={onSchedule}
-                    className="inline-flex min-h-[38px] items-center gap-2 rounded-xl bg-sky-400 px-4 py-2 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-sky-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+                    className="inline-flex min-h-[38px] items-center gap-2 rounded-lg bg-action px-4 py-2 text-xs font-semibold text-action-ink transition hover:bg-action-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page"
                 >
                     <svg
                         viewBox="0 0 24 24"
@@ -907,7 +907,7 @@ function InsightsPanel({
 }) {
     if (!segment) {
         return (
-            <aside className="bg-slate-900/40 p-6 text-xs text-slate-400">
+            <aside className="bg-surface p-6 text-xs text-muted">
                 Select a segment to view viral insights and scheduling controls.
             </aside>
         );
@@ -920,22 +920,22 @@ function InsightsPanel({
     return (
         <aside
             aria-label="Clip Insights and Publishing Queue"
-            className="flex min-w-0 flex-col bg-[#0A0D14] p-5 lg:h-[calc(100vh-69px)] lg:overflow-y-auto"
+            className="flex min-w-0 flex-col bg-page p-5 lg:h-[calc(100vh-69px)] lg:overflow-y-auto"
         >
             {/* Segmented Tab Switcher */}
             <div
                 role="tablist"
                 aria-label="Inspector tabs"
-                className="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-slate-800 bg-slate-950 p-1"
+                className="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-line bg-page p-1"
             >
                 <button
                     type="button"
                     role="tab"
                     aria-selected={tab === "insights"}
                     onClick={() => setTab("insights")}
-                    className={`rounded-lg px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${tab === "insights"
-                        ? "bg-slate-800 text-white shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
+                    className={`rounded-lg px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${tab === "insights"
+                        ? "bg-surface text-ink "
+                        : "text-muted hover:text-ink"
                         }`}
                 >
                     Viral Metadata
@@ -945,14 +945,14 @@ function InsightsPanel({
                     role="tab"
                     aria-selected={tab === "schedule"}
                     onClick={() => setTab("schedule")}
-                    className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${tab === "schedule"
-                        ? "bg-slate-800 text-white shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
+                    className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${tab === "schedule"
+                        ? "bg-surface text-ink "
+                        : "text-muted hover:text-ink"
                         }`}
                 >
-                    <span>Publish Queue</span>
+                    <span>Scheduled posts</span>
                     {activeQueueCount > 0 && (
-                        <span className="rounded-full bg-sky-400/20 px-1.5 py-0.2 font-mono text-[10px] font-bold text-sky-300">
+                        <span className="rounded-full bg-action/20 px-1.5 py-0.2 tabular-nums text-xs font-semibold text-link">
                             {activeQueueCount}
                         </span>
                     )}
@@ -1041,7 +1041,7 @@ function MetadataEditor({
     return (
         <div className="space-y-5">
             <div className="flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <h2 className="text-xs font-semibold text-muted">
                     Viral Metadata & Hooks
                 </h2>
                 <button
@@ -1050,19 +1050,19 @@ function MetadataEditor({
                         setEditing(!editing);
                         setSaveError(null);
                     }}
-                    className="rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1 text-xs font-semibold text-sky-400 transition hover:border-slate-700 hover:text-sky-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                    className="rounded-lg border border-line bg-raised px-2.5 py-1 text-xs font-semibold text-link transition hover:border-line-strong hover:text-link focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                 >
-                    {editing ? "Cancel" : "Edit Metadata"}
+                    {editing ? "Cancel" : "Edit details"}
                 </button>
             </div>
 
             {editing ? (
-                <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                <div className="space-y-4 rounded-xl border border-line bg-page/70 p-4">
                     <label className="block">
-                        <span className="mb-1.5 block text-xs font-semibold text-slate-300">
+                        <span className="mb-1.5 block text-xs font-semibold text-ink">
                             Video Title
                         </span>
-                        <span className="mb-1.5 block text-[11px] leading-relaxed text-slate-500">
+                        <span className="mb-1.5 block text-xs leading-relaxed text-muted">
                             Shown as the title when publishing to YouTube. Social captions are managed separately.
                         </span>
                         <input
@@ -1070,27 +1070,27 @@ function MetadataEditor({
                             value={title}
                             maxLength={100}
                             onChange={(event) => setTitle(event.target.value)}
-                            className="block w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                            className="block w-full rounded-xl border border-line-strong bg-raised px-3 py-2 text-xs text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-focus"
                         />
-                        <span className="mt-1 block text-right text-[10px] text-slate-500">
+                        <span className="mt-1 block text-right text-xs text-muted">
                             {title.length} / 100
                         </span>
                     </label>
 
                     <label className="block">
-                        <span className="mb-1.5 block text-xs font-semibold text-slate-300">
+                        <span className="mb-1.5 block text-xs font-semibold text-ink">
                             Thumbnail Hook Badge
                         </span>
                         <input
                             placeholder="e.g. WAIT FOR IT..."
                             value={thumbnailText}
                             onChange={(event) => setThumbnailText(event.target.value)}
-                            className="block w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                            className="block w-full rounded-xl border border-line-strong bg-raised px-3 py-2 text-xs text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-focus"
                         />
                     </label>
 
                     <label className="block">
-                        <span className="mb-1.5 block text-xs font-semibold text-slate-300">
+                        <span className="mb-1.5 block text-xs font-semibold text-ink">
                             Social Media Caption
                         </span>
                         <textarea
@@ -1098,12 +1098,12 @@ function MetadataEditor({
                             value={socialCaption}
                             onChange={(event) => setSocialCaption(event.target.value)}
                             rows={4}
-                            className="block w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-xs leading-relaxed text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                            className="block w-full rounded-xl border border-line-strong bg-raised p-3 text-xs leading-relaxed text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-focus"
                         />
                     </label>
 
                     <label className="block">
-                        <span className="mb-1.5 block text-xs font-semibold text-slate-300">
+                        <span className="mb-1.5 block text-xs font-semibold text-ink">
                             Key Talking Points (one per line)
                         </span>
                         <textarea
@@ -1111,7 +1111,7 @@ function MetadataEditor({
                             value={keyPoints}
                             onChange={(event) => setKeyPoints(event.target.value)}
                             rows={4}
-                            className="block w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-xs leading-relaxed text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                            className="block w-full rounded-xl border border-line-strong bg-raised p-3 text-xs leading-relaxed text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-focus"
                         />
                     </label>
 
@@ -1119,12 +1119,12 @@ function MetadataEditor({
                         type="button"
                         onClick={() => void save()}
                         disabled={saving}
-                        className="w-full min-h-[40px] rounded-xl bg-sky-400 px-4 py-2 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-sky-300 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                        className="w-full min-h-[40px] rounded-lg bg-action px-4 py-2 text-xs font-semibold text-action-ink transition hover:bg-action-hover disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     >
-                        {saving ? "Saving Changes..." : "Save Metadata"}
+                        {saving ? "Saving" : "Save details"}
                     </button>
                     {saveError && (
-                        <p role="alert" className="text-xs text-rose-300">
+                        <p role="alert" className="text-xs text-danger">
                             {saveError}
                         </p>
                     )}
@@ -1132,8 +1132,8 @@ function MetadataEditor({
             ) : (
                 <div className="space-y-4">
                     {/* Thumbnail & Hook Preview Card */}
-                    <div className="flex items-center gap-3.5 rounded-2xl border border-slate-800 bg-slate-950/70 p-3.5">
-                        <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+                    <div className="flex items-center gap-3.5 rounded-xl border border-line bg-page/70 p-3.5">
+                        <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-lg border border-line bg-raised">
                             {segment.thumbnailUrl ? (
                                 <img
                                     src={segment.thumbnailUrl}
@@ -1141,7 +1141,7 @@ function MetadataEditor({
                                     className="h-full w-full object-cover"
                                 />
                             ) : (
-                                <div className="flex h-full w-full items-center justify-center text-slate-600">
+                                <div className="flex h-full w-full items-center justify-center text-muted">
                                     <svg
                                         viewBox="0 0 24 24"
                                         fill="none"
@@ -1159,11 +1159,11 @@ function MetadataEditor({
                         </div>
                         <div className="min-w-0 flex-1">
                             {segment.thumbnailText && (
-                                <span className="inline-block rounded bg-sky-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-300">
+                                <span className="inline-block rounded bg-action/15 px-2 py-0.5 text-xs font-semibold text-link">
                                     {segment.thumbnailText}
                                 </span>
                             )}
-                            <h3 className="mt-1.5 text-sm font-bold leading-snug text-white">
+                            <h3 className="mt-1.5 text-sm font-semibold leading-snug text-ink">
                                 {segment.title}
                             </h3>
                         </div>
@@ -1171,35 +1171,35 @@ function MetadataEditor({
 
                     {/* Auto-Caption Card */}
                     {segment.socialCaption && (
-                        <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                        <div className="rounded-xl border border-line bg-page/70 p-4">
                             <div className="mb-2 flex items-center justify-between">
-                                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                <span className="text-xs font-semibold text-muted">
                                     Suggested Social Caption
                                 </span>
                                 <button
                                     type="button"
                                     onClick={() => void handleCopy()}
-                                    className="text-xs font-semibold text-sky-400 transition hover:text-sky-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 rounded"
+                                    className="text-xs font-semibold text-link transition hover:text-link focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded"
                                 >
-                                    {copied ? "Copied!" : "Copy"}
+                                    {copied ? "Copied" : "Copy"}
                                 </button>
                             </div>
-                            <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-200">
+                            <p className="whitespace-pre-wrap text-xs leading-relaxed text-ink">
                                 {segment.socialCaption}
                             </p>
                         </div>
                     )}
 
                     {/* Key Highlights */}
-                    <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-                        <span className="mb-3 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    <div className="rounded-xl border border-line bg-page/70 p-4">
+                        <span className="mb-3 block text-xs font-semibold text-muted">
                             Key Retention Hooks
                         </span>
-                        <ul className="space-y-2.5 text-xs leading-relaxed text-slate-300">
+                        <ul className="space-y-2.5 text-xs leading-relaxed text-ink">
                             {segment.keyPoints.map((point) => (
                                 <li key={point} className="flex items-start gap-2.5">
                                     <span
-                                        className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400"
+                                        className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-action"
                                         aria-hidden="true"
                                     />
                                     <span>{point}</span>
@@ -1253,13 +1253,13 @@ function SchedulePanel({
     return (
         <div className="space-y-5">
             <div className="flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <h2 className="text-xs font-semibold text-muted">
                     Scheduled Distribution
                 </h2>
                 <button
                     type="button"
                     onClick={onOpenModal}
-                    className="text-xs font-semibold text-sky-400 hover:text-sky-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 rounded"
+                    className="text-xs font-semibold text-link hover:text-link focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded"
                 >
                     Expand Modal ↗
                 </button>
@@ -1278,14 +1278,14 @@ function SchedulePanel({
                         return (
                             <div
                                 key={post.id}
-                                className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950/80 p-3 pl-4 text-xs"
+                                className="relative overflow-hidden rounded-xl border border-line bg-page/80 p-3 pl-4 text-xs"
                             >
                                 <span
                                     aria-hidden="true"
                                     className={`absolute inset-y-0 left-0 w-1 ${platformMeta.accentBar}`}
                                 />
                                 <div className="flex items-center justify-between gap-2">
-                                    <span className="inline-flex items-center gap-1.5 font-semibold text-slate-100">
+                                    <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
                                         <span className={platformMeta.iconColor}>
                                             <PlatformIcon
                                                 platform={post.socialAccount.platform}
@@ -1296,7 +1296,7 @@ function SchedulePanel({
                                     </span>
 
                                     <span
-                                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusMeta.badgeClass}`}
+                                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${statusMeta.badgeClass}`}
                                     >
                                         <span
                                             className={`h-1.5 w-1.5 rounded-full ${statusMeta.dotClass}`}
@@ -1305,8 +1305,8 @@ function SchedulePanel({
                                     </span>
                                 </div>
 
-                                <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-                                    <span className="font-mono">
+                                <div className="mt-2 flex items-center justify-between text-xs text-muted">
+                                    <span className="tabular-nums">
                                         {format(
                                             parseISO(post.scheduledFor),
                                             "MMM d, yyyy · h:mm a",
@@ -1318,7 +1318,7 @@ function SchedulePanel({
                                             href={post.publishedUrl}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="font-semibold text-sky-400 hover:underline"
+                                            className="font-semibold text-link hover:underline"
                                         >
                                             View Live ↗
                                         </a>
@@ -1326,7 +1326,7 @@ function SchedulePanel({
                                         <button
                                             type="button"
                                             onClick={() => void handleCancelPost(post.id)}
-                                            className="text-rose-400 hover:text-rose-300"
+                                            className="text-danger hover:text-danger"
                                         >
                                             Remove
                                         </button>
@@ -1337,7 +1337,7 @@ function SchedulePanel({
                     })}
                 </div>
             ) : (
-                <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/40 p-4 text-center text-xs text-slate-400">
+                <div className="rounded-xl border border-dashed border-line bg-surface p-4 text-center text-xs text-muted">
                     No scheduled posts for this clip yet.
                 </div>
             )}
@@ -1345,13 +1345,13 @@ function SchedulePanel({
             {/* Quick Schedule Form */}
             <form
                 onSubmit={handleScheduleSubmit}
-                className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950/70 p-4"
+                className="space-y-4 rounded-xl border border-line bg-page/70 p-4"
             >
                 <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-200">
+                    <span className="text-xs font-semibold text-ink">
                         Quick Queue Clip
                     </span>
-                    <span className="text-[11px] text-slate-400">
+                    <span className="text-xs text-muted">
                         {selectedAccountIds.length} selected
                     </span>
                 </div>
@@ -1359,7 +1359,7 @@ function SchedulePanel({
                 {error && (
                     <p
                         role="alert"
-                        className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-xs font-medium text-rose-300"
+                        className="rounded-lg border border-danger/30 bg-danger/10 p-2 text-xs font-medium text-danger"
                     >
                         {error}
                     </p>
@@ -1376,9 +1376,9 @@ function SchedulePanel({
                                 type="button"
                                 aria-pressed={isSelected}
                                 onClick={() => toggleAccountSelection(acc.id)}
-                                className={`flex min-h-[38px] items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${isSelected
+                                className={`flex min-h-[38px] items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${isSelected
                                     ? meta.activeRing
-                                    : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                                    : "border-line bg-raised text-muted hover:border-line-strong hover:text-ink"
                                     }`}
                             >
                                 <span className={meta.iconColor}>
@@ -1396,7 +1396,7 @@ function SchedulePanel({
                 {/* Date & Time */}
                 <div className="grid grid-cols-2 gap-2.5">
                     <label className="block">
-                        <span className="mb-1 block text-[11px] font-semibold text-slate-300">
+                        <span className="mb-1 block text-xs font-semibold text-ink">
                             Date
                         </span>
                         <input
@@ -1404,11 +1404,11 @@ function SchedulePanel({
                             required
                             value={dateString}
                             onChange={(e) => setDateString(e.target.value)}
-                            className="block w-full rounded-xl border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                            className="block w-full rounded-xl border border-line-strong bg-raised px-2.5 py-2 text-xs text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-focus"
                         />
                     </label>
                     <label className="block">
-                        <span className="mb-1 block text-[11px] font-semibold text-slate-300">
+                        <span className="mb-1 block text-xs font-semibold text-ink">
                             Time
                         </span>
                         <input
@@ -1416,7 +1416,7 @@ function SchedulePanel({
                             required
                             value={timeString}
                             onChange={(e) => setTimeString(e.target.value)}
-                            className="block w-full rounded-xl border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                            className="block w-full rounded-xl border border-line-strong bg-raised px-2.5 py-2 text-xs text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-focus"
                         />
                     </label>
                 </div>
@@ -1428,9 +1428,9 @@ function SchedulePanel({
                             key={preset.time}
                             type="button"
                             onClick={() => setTimeString(preset.time)}
-                            className={`rounded-md border px-2 py-0.5 font-mono text-[10px] transition ${timeString === preset.time
-                                ? "border-sky-400/60 bg-sky-400/15 text-sky-300"
-                                : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                            className={`rounded-md border px-2 py-0.5 tabular-nums text-xs transition ${timeString === preset.time
+                                ? "border-action/60 bg-action/15 text-link"
+                                : "border-line bg-raised text-muted hover:border-line-strong hover:text-ink"
                                 }`}
                         >
                             {preset.display}
@@ -1443,11 +1443,11 @@ function SchedulePanel({
                     <div className="mb-1 flex items-center justify-between">
                         <label
                             htmlFor="panel-caption-input"
-                            className="text-[11px] font-semibold text-slate-300"
+                            className="text-xs font-semibold text-ink"
                         >
-                            Caption & Hashtags
+                            Caption and hashtags
                         </label>
-                        <span className="font-mono text-[10px] text-slate-400">
+                        <span className="tabular-nums text-xs text-muted">
                             {caption.length} / 2200
                         </span>
                     </div>
@@ -1458,17 +1458,17 @@ function SchedulePanel({
                         placeholder="Write a hook and hashtags..."
                         rows={3}
                         maxLength={2200}
-                        className="block w-full rounded-xl border border-slate-700 bg-slate-900 p-2.5 text-xs leading-relaxed text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                        className="block w-full rounded-xl border border-line-strong bg-raised p-2.5 text-xs leading-relaxed text-ink placeholder:text-muted focus:border-action focus:outline-none focus:ring-1 focus:ring-focus"
                     />
                 </div>
 
                 <button
                     type="submit"
                     disabled={isScheduling}
-                    className="w-full min-h-[40px] rounded-xl bg-sky-400 px-4 py-2 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-sky-300 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                    className="w-full min-h-[40px] rounded-lg bg-action px-4 py-2 text-xs font-semibold text-action-ink transition hover:bg-action-hover disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                 >
                     {isScheduling
-                        ? "Queueing Post..."
+                        ? "Scheduling post"
                         : `Confirm Schedule (${selectedAccountIds.length})`}
                 </button>
             </form>
@@ -1510,18 +1510,18 @@ function ScheduleModal({
             role="dialog"
             aria-modal="true"
             aria-labelledby="schedule-modal-title"
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
         >
-            <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
+            <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-line bg-raised shadow-[0_24px_48px_-24px_rgba(14,20,36,0.4)]">
                 {/* Modal Header */}
-                <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+                <div className="flex items-center justify-between border-b border-line px-6 py-4">
                     <div>
-                        <span className="text-[11px] font-semibold uppercase tracking-widest text-sky-400">
+                        <span className="text-xs font-semibold text-link">
                             Schedule Distribution
                         </span>
                         <h3
                             id="schedule-modal-title"
-                            className="mt-0.5 text-base font-bold text-white"
+                            className="mt-0.5 text-base font-semibold text-ink"
                         >
                             {segment.title}
                         </h3>
@@ -1530,7 +1530,7 @@ function ScheduleModal({
                         type="button"
                         onClick={onClose}
                         aria-label="Close schedule modal"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted transition hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     >
                         <svg
                             viewBox="0 0 24 24"
@@ -1551,8 +1551,8 @@ function ScheduleModal({
                     className="grid grid-cols-1 gap-6 p-6 md:grid-cols-[200px_1fr]"
                 >
                     {/* Left Column: Media Preview */}
-                    <div className="flex flex-col justify-between rounded-xl border border-slate-800 bg-slate-950 p-3">
-                        <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-slate-900">
+                    <div className="flex flex-col justify-between rounded-xl border border-line bg-page p-3">
+                        <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-raised">
                             {previewSource ? (
                                 <video
                                     src={previewSource}
@@ -1569,17 +1569,17 @@ function ScheduleModal({
                                 />
                             ) : (
                                 <div className="flex h-full flex-col items-center justify-center p-4 text-center">
-                                    <span className="rounded bg-sky-500/15 px-2 py-1 text-[10px] font-bold text-sky-300">
+                                    <span className="rounded bg-action/15 px-2 py-1 text-xs font-semibold text-link">
                                         {segment.thumbnailText || "HIGHLIGHT"}
                                     </span>
-                                    <p className="mt-2 text-xs text-slate-400">
+                                    <p className="mt-2 text-xs text-muted">
                                         {segment.title}
                                     </p>
                                 </div>
                             )}
                         </div>
 
-                        <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
+                        <div className="mt-3 flex items-center justify-between text-xs text-muted">
                             <span>
                                 {aspectRatio === "VERTICAL_9_16"
                                     ? "9:16 Vertical"
@@ -1587,7 +1587,7 @@ function ScheduleModal({
                                         ? "1:1 Square"
                                         : "16:9 Landscape"}
                             </span>
-                            <span className="font-mono font-semibold text-slate-200">
+                            <span className="tabular-nums font-semibold text-ink">
                                 {formatDurationBadge(clipDuration)}
                             </span>
                         </div>
@@ -1595,13 +1595,13 @@ function ScheduleModal({
 
                     {/* Right Column: Form Controls */}
                     <div className="space-y-4">
-                        {/* Target Channels */}
+                        {/* Post to */}
                         <div>
                             <div className="mb-1.5 flex items-center justify-between">
-                                <span className="text-xs font-semibold text-slate-300">
-                                    Target Channels
+                                <span className="text-xs font-semibold text-ink">
+                                    Post to
                                 </span>
-                                <span className="text-[11px] text-slate-400">
+                                <span className="text-xs text-muted">
                                     {selectedAccountIds.length} selected
                                 </span>
                             </div>
@@ -1619,9 +1619,9 @@ function ScheduleModal({
                                             onClick={() =>
                                                 toggleAccountSelection(acc.id)
                                             }
-                                            className={`flex min-h-[42px] items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${isSelected
+                                            className={`flex min-h-[42px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${isSelected
                                                 ? meta.activeRing
-                                                : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                                                : "border-line bg-page text-muted hover:border-line-strong hover:text-ink"
                                                 }`}
                                         >
                                             <span className={meta.iconColor}>
@@ -1640,7 +1640,7 @@ function ScheduleModal({
                             {error && (
                                 <p
                                     role="alert"
-                                    className="mt-1.5 text-xs font-medium text-rose-400"
+                                    className="mt-1.5 text-xs font-medium text-danger"
                                 >
                                     {error}
                                 </p>
@@ -1651,8 +1651,8 @@ function ScheduleModal({
                         <div>
                             <div className="grid grid-cols-2 gap-3">
                                 <label className="block">
-                                    <span className="mb-1.5 block text-xs font-semibold text-slate-300">
-                                        Publish Date
+                                    <span className="mb-1.5 block text-xs font-semibold text-ink">
+                                        Date
                                     </span>
                                     <input
                                         type="date"
@@ -1661,12 +1661,12 @@ function ScheduleModal({
                                         onChange={(e) =>
                                             setDateString(e.target.value)
                                         }
-                                        className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                        className="block w-full rounded-xl border border-line-strong bg-page px-3 py-2 text-xs text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-focus"
                                     />
                                 </label>
                                 <label className="block">
-                                    <span className="mb-1.5 block text-xs font-semibold text-slate-300">
-                                        Publish Time
+                                    <span className="mb-1.5 block text-xs font-semibold text-ink">
+                                        Time
                                     </span>
                                     <input
                                         type="time"
@@ -1675,13 +1675,13 @@ function ScheduleModal({
                                         onChange={(e) =>
                                             setTimeString(e.target.value)
                                         }
-                                        className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                        className="block w-full rounded-xl border border-line-strong bg-page px-3 py-2 text-xs text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-focus"
                                     />
                                 </label>
                             </div>
 
                             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                <span className="mr-1 text-[11px] text-slate-400">
+                                <span className="mr-1 text-xs text-muted">
                                     Quick slots:
                                 </span>
                                 {QUICK_TIME_PRESETS.map((preset) => (
@@ -1691,9 +1691,9 @@ function ScheduleModal({
                                         onClick={() =>
                                             setTimeString(preset.time)
                                         }
-                                        className={`rounded-md border px-2 py-0.5 font-mono text-[11px] transition ${timeString === preset.time
-                                            ? "border-sky-400/60 bg-sky-400/15 text-sky-300"
-                                            : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                                        className={`rounded-md border px-2 py-0.5 tabular-nums text-xs transition ${timeString === preset.time
+                                            ? "border-action/60 bg-action/15 text-link"
+                                            : "border-line bg-page text-muted hover:border-line-strong hover:text-ink"
                                             }`}
                                     >
                                         {preset.display}
@@ -1707,11 +1707,11 @@ function ScheduleModal({
                             <div className="mb-1.5 flex items-center justify-between">
                                 <label
                                     htmlFor="modal-caption-input"
-                                    className="text-xs font-semibold text-slate-300"
+                                    className="text-xs font-semibold text-ink"
                                 >
-                                    Caption & Hashtags
+                                    Caption and hashtags
                                 </label>
-                                <span className="font-mono text-[11px] text-slate-400">
+                                <span className="tabular-nums text-xs text-muted">
                                     {caption.length} / 2200
                                 </span>
                             </div>
@@ -1722,27 +1722,27 @@ function ScheduleModal({
                                 value={caption}
                                 onChange={(e) => setCaption(e.target.value)}
                                 placeholder="Write a hook and relevant hashtags (#shorts #reels #tiktok)..."
-                                className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs leading-relaxed text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                className="block w-full rounded-xl border border-line-strong bg-page p-3 text-xs leading-relaxed text-ink placeholder:text-muted focus:border-action focus:outline-none focus:ring-1 focus:ring-focus"
                             />
                         </div>
 
                         {/* Submit Actions */}
-                        <div className="flex items-center justify-end gap-2.5 border-t border-slate-800 pt-4">
+                        <div className="flex items-center justify-end gap-2.5 border-t border-line pt-4">
                             <button
                                 type="button"
                                 onClick={onClose}
                                 disabled={isScheduling}
-                                className="min-h-[40px] rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white disabled:opacity-50"
+                                className="min-h-[40px] rounded-lg border border-line-strong px-4 py-2 text-xs font-semibold text-ink transition hover:bg-surface hover:text-ink disabled:opacity-50"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
                                 disabled={isScheduling}
-                                className="min-h-[40px] rounded-xl bg-sky-400 px-5 py-2 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-sky-300 disabled:opacity-50"
+                                className="min-h-[40px] rounded-lg bg-action px-5 py-2 text-xs font-semibold text-action-ink transition hover:bg-action-hover disabled:opacity-50"
                             >
                                 {isScheduling
-                                    ? "Queueing Post..."
+                                    ? "Scheduling post"
                                     : `Confirm Schedule (${selectedAccountIds.length})`}
                             </button>
                         </div>
@@ -1755,13 +1755,13 @@ function ScheduleModal({
 
 function StudioSkeleton() {
     return (
-        <main className="min-h-screen animate-pulse bg-slate-950 p-6">
+        <main className="min-h-screen animate-pulse bg-page p-6">
             <div className="mx-auto max-w-[1600px]">
-                <div className="h-10 w-72 rounded-xl bg-slate-900" />
+                <div className="h-10 w-72 rounded-lg bg-raised" />
                 <div className="mt-6 grid gap-6 lg:grid-cols-[360px_1fr_380px]">
-                    <div className="h-[78vh] rounded-2xl bg-slate-900/70" />
-                    <div className="h-[78vh] rounded-2xl bg-slate-900/70" />
-                    <div className="h-[78vh] rounded-2xl bg-slate-900/70" />
+                    <div className="h-[78vh] rounded-xl bg-raised/70" />
+                    <div className="h-[78vh] rounded-xl bg-raised/70" />
+                    <div className="h-[78vh] rounded-xl bg-raised/70" />
                 </div>
             </div>
         </main>
