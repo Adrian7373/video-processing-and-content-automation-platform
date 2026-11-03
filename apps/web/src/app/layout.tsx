@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import AppSidebar from "./components/AppSideBar";
-import TopNav from "./components/TopNav";
+import AppChrome from "./components/AppChrome";
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -36,16 +35,7 @@ export default function RootLayout({
             <body
                 className={`${geistSans.variable} ${geistMono.variable} bg-[#0A0D14] text-slate-100 antialiased`}
             >
-                <div className="flex min-h-screen w-full bg-[#0A0D14]">
-                    <AppSidebar />
-                    {/* Main Workspace Column */}
-                    <div className="flex min-w-0 flex-1 flex-col">
-                        <TopNav />
-                        <main className="flex-1">
-                            {children}
-                        </main>
-                    </div>
-                </div>
+                <AppChrome>{children}</AppChrome>
             </body>
         </html>
     );
