@@ -56,6 +56,8 @@ export default async function VideosPage({
             _count: { select: { segments: true } },
             segments: {
                 take: 1,
+                // Thumbnails are best-effort in the worker; skip clips without one.
+                where: { thumbnailS3Key: { not: null } },
                 orderBy: { startTime: "asc" },
                 select: {
                     thumbnailS3Key: true,

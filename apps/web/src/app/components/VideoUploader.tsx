@@ -175,19 +175,35 @@ export default function VideoUploader() {
             throw new Error("Video files must not exceed 300 MB.");
         }
 
+        if (selectedFile.size === 0) {
+            throw new Error("The selected video file is empty.");
+        }
+
         const objectUrl = URL.createObjectURL(selectedFile);
         try {
-            const duration = await new Promise<number>((resolve, reject) => {
+            // Resolves to null when the browser cannot read the metadata (e.g. an
+            // HEVC .mov in Chrome) or never answers. Those files are still valid,
+            // and the worker enforces the 45-minute limit itself with ffprobe.
+            const duration = await new Promise<number | null>((resolve) => {
                 const video = document.createElement("video");
+                const timer = window.setTimeout(() => resolve(null), 10_000);
                 video.preload = "metadata";
-                video.onloadedmetadata = () => resolve(video.duration);
-                video.onerror = () =>
-                    reject(new Error("Unable to read the video duration."));
+                video.muted = true;
+                video.onloadedmetadata = () => {
+                    window.clearTimeout(timer);
+                    resolve(video.duration);
+                };
+                video.onerror = () => {
+                    window.clearTimeout(timer);
+                    resolve(null);
+                };
                 video.src = objectUrl;
             });
 
+            // MediaRecorder WebM reports Infinity until fully scanned; treat that as unknown.
             if (
-                !Number.isFinite(duration) ||
+                duration !== null &&
+                Number.isFinite(duration) &&
                 duration > MAX_UPLOAD_DURATION_SECONDS
             ) {
                 throw new Error("Videos must not exceed 45 minutes.");
@@ -235,6 +251,16 @@ export default function VideoUploader() {
             return;
         }
 
+        // Some browsers (notably on Windows) report an empty MIME type for .mov/.mp4.
+        const extension = file.name.split(".").pop()?.toLowerCase();
+        const contentType =
+            file.type ||
+            (extension === "mov"
+                ? "video/quicktime"
+                : extension === "webm"
+                    ? "video/webm"
+                    : "video/mp4");
+
         try {
             await validateSelectedFile(file);
         } catch (error) {
@@ -265,7 +291,7 @@ export default function VideoUploader() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     filename: file.name,
-                    contentType: file.type,
+                    contentType: contentType,
                     fileSize: file.size,
                     userId: actor?.userId,
                     userPrompt: mode === "CLIP" ? userPrompt : "",
@@ -298,49 +324,60 @@ export default function VideoUploader() {
             const { videoId, s3Key, userId } =
                 (await initializationResponse.json()) as InitVideoSuccessResponse;
 
-            const { uploadUrl } = await getPresignedUploadUrl(
-                {
-                    filename: file.name,
-                    contentType: file.type,
-                    fileSize: file.size,
-                },
-                s3Key,
-            );
-
             setLoadingMessage(pickRandomPhrase());
             setStatus("uploading");
 
-            await new Promise<void>((resolve, reject) => {
-                const xhr = new XMLHttpRequest();
+            // Retry transient network/5xx failures with a fresh presigned URL,
+            // so a brief connection drop does not cost the user their upload.
+            const MAX_UPLOAD_ATTEMPTS = 3;
+            for (let attempt = 1; ; attempt++) {
+                const { uploadUrl } = await getPresignedUploadUrl(
+                    {
+                        filename: file.name,
+                        contentType: contentType,
+                        fileSize: file.size,
+                    },
+                    s3Key,
+                );
 
-                xhr.upload.onprogress = (progressEvent) => {
-                    if (progressEvent.lengthComputable) {
-                        const percentComplete = Math.round(
-                            (progressEvent.loaded / progressEvent.total) * 95,
-                        );
-                        setProgress(percentComplete);
-                    }
-                };
+                const outcome = await new Promise<"ok" | "retry" | "fatal">((resolve) => {
+                    const xhr = new XMLHttpRequest();
 
-                xhr.onload = () => {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        resolve();
-                    } else {
-                        reject(
-                            new Error(
-                                "The video could not be uploaded to storage.",
-                            ),
-                        );
-                    }
-                };
+                    xhr.upload.onprogress = (progressEvent) => {
+                        if (progressEvent.lengthComputable) {
+                            const percentComplete = Math.round(
+                                (progressEvent.loaded / progressEvent.total) * 95,
+                            );
+                            setProgress(percentComplete);
+                        }
+                    };
 
-                xhr.onerror = () =>
-                    reject(new Error("Network error during upload."));
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) resolve("ok");
+                        else if (xhr.status >= 500 || xhr.status === 408 || xhr.status === 429)
+                            resolve("retry");
+                        else resolve("fatal");
+                    };
+                    xhr.onerror = () => resolve("retry");
+                    xhr.ontimeout = () => resolve("retry");
 
-                xhr.open("PUT", uploadUrl);
-                xhr.setRequestHeader("Content-Type", file.type);
-                xhr.send(file);
-            });
+                    xhr.open("PUT", uploadUrl);
+                    xhr.setRequestHeader("Content-Type", contentType);
+                    xhr.send(file);
+                });
+
+                if (outcome === "ok") break;
+                if (outcome === "fatal") {
+                    throw new Error("The video could not be uploaded to storage.");
+                }
+                if (attempt >= MAX_UPLOAD_ATTEMPTS) {
+                    throw new Error(
+                        "Network error during upload. Check your connection and try again.",
+                    );
+                }
+                setProgress(0);
+                await new Promise((resolve) => window.setTimeout(resolve, 2000 * attempt));
+            }
 
             setProgress(98);
 

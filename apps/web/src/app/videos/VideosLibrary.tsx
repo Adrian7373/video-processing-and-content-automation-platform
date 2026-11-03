@@ -73,10 +73,18 @@ export default function VideosLibrary({
             const response = await fetch(`/api/videos/${videoId}/retry`, {
                 method: "POST",
             });
-            if (!response.ok) throw new Error("Retry failed.");
+            if (!response.ok) {
+                const payload = (await response.json().catch(() => ({}))) as {
+                    error?: string;
+                };
+                throw new Error(payload.error ?? "Retry failed. Please try again.");
+            }
             router.refresh();
         } catch (error) {
             console.error("Unable to retry video.", error);
+            window.alert(
+                error instanceof Error ? error.message : "Retry failed. Please try again.",
+            );
         } finally {
             setRetrying(null);
         }

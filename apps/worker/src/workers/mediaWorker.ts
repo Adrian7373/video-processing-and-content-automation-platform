@@ -1,4 +1,7 @@
-import { Worker, type Job } from "bullmq";
+import { UnrecoverableError, Worker, type Job } from "bullmq";
+
+import { prisma } from "../../../../packages/database/index.js";
+import { failVideoAndRefund } from "../../../../packages/database/videoLifecycle.js";
 
 import { lowPollingWorkerOptions } from "../config/workerOptions.js";
 import { queueNames, jobNames } from "../constants/queues.js";
@@ -69,5 +72,23 @@ for (const worker of [mediaWorker, legacyVideoWorker]) {
             `Media job ${job?.id ?? "unknown"} (${job?.name ?? "unknown"}) failed.`,
             error.stack ?? error.message,
         );
+
+        // Safety net for failures the processor's own catch never sees, such as
+        // a job that stalled too often after worker crashes or OOM kills.
+        // failVideoAndRefund is idempotent, so a double call never double-refunds.
+        if (!job || job.name !== jobNames.processVideo || !job.id) return;
+        const maxAttempts = job.opts.attempts ?? 1;
+        const isFinal =
+            error instanceof UnrecoverableError || job.attemptsMade >= maxAttempts;
+        const videoId = (job.data as { videoId?: unknown }).videoId;
+        if (!isFinal || typeof videoId !== "string") return;
+
+        void failVideoAndRefund(prisma, {
+            videoId,
+            jobId: String(job.id),
+            error,
+        }).catch((refundError: unknown) => {
+            console.error(`Failed to finalize failed video ${videoId}.`, refundError);
+        });
     });
 }

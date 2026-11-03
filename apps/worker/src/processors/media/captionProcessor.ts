@@ -64,7 +64,13 @@ export interface GenerateCaptionsOptions {
     segmentEndTime: number;
     captionStyle: CaptionStyleType;
     aspectRatio: AspectRatioType;
+    /** Resolved FFmpeg executable; falls back to FFMPEG_PATH, then "ffmpeg" on PATH. */
+    ffmpegPath?: string;
+    /** Kill FFmpeg if rendering exceeds this many milliseconds. */
+    timeoutMs?: number;
 }
+
+const DEFAULT_CAPTION_RENDER_TIMEOUT_MS = 30 * 60 * 1000;
 
 export interface GenerateCaptionsResult {
     captionedClipPath: string | null;
@@ -318,6 +324,8 @@ export async function generateAndBurnCaptions(
         segmentEndTime,
         captionStyle,
         aspectRatio,
+        ffmpegPath,
+        timeoutMs = DEFAULT_CAPTION_RENDER_TIMEOUT_MS,
     } = options;
 
     const duration = Math.max(0.1, segmentEndTime - segmentStartTime);
@@ -361,7 +369,7 @@ export async function generateAndBurnCaptions(
 
     await new Promise<void>((resolve, reject) => {
         const ffmpegProcess = spawn(
-            process.env.FFMPEG_PATH ?? "ffmpeg",
+            ffmpegPath ?? process.env.FFMPEG_PATH ?? "ffmpeg",
             [
                 "-y",
                 "-threads",
@@ -393,12 +401,29 @@ export async function generateAndBurnCaptions(
             { stdio: ["ignore", "ignore", "pipe"], windowsHide: true },
         );
         let stderrTail = "";
+        let timedOut = false;
+        const killTimer = setTimeout(() => {
+            timedOut = true;
+            ffmpegProcess.kill("SIGKILL");
+        }, timeoutMs);
 
         ffmpegProcess.stderr.on("data", (chunk: Buffer | string) => {
             stderrTail = `${stderrTail}${chunk.toString()}`.slice(-2048);
         });
-        ffmpegProcess.once("error", reject);
+        ffmpegProcess.once("error", (error) => {
+            clearTimeout(killTimer);
+            reject(error);
+        });
         ffmpegProcess.once("close", (code, signal) => {
+            clearTimeout(killTimer);
+            if (timedOut) {
+                reject(
+                    new Error(
+                        `FFmpeg caption rendering timed out after ${Math.round(timeoutMs / 1000)}s.`,
+                    ),
+                );
+                return;
+            }
             if (code === 0) {
                 resolve();
                 return;

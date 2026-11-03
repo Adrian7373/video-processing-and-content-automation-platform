@@ -75,3 +75,54 @@ if (process.env.NODE_ENV !== "production") {
     globalForQueues.mediaProcessingQueue = mediaProcessingQueue;
     globalForQueues.socialPublishingQueue = socialPublishingQueue;
 }
+/**
+ * Shared enqueue options for video processing. Three attempts with backoff
+ * absorb transient failures (S3/Groq/Gemini/network); the worker marks
+ * deterministic failures as unrecoverable so they are not retried.
+ */
+export const VIDEO_PROCESSING_JOB_OPTIONS = {
+    attempts: 3,
+    backoff: { type: "exponential" as const, delay: 10_000 },
+    removeOnComplete: { count: 100 },
+    removeOnFail: { count: 100 },
+};
+
+/**
+ * Enqueues a video-processing job under a caller-chosen ID. The caller must
+ * have stored that ID on the Video row *before* calling this, so the worker
+ * can never start a job the database does not know about.
+ */
+export async function enqueueVideoProcessing(
+    jobData: MediaProcessingJobData,
+    jobId: string,
+): Promise<string> {
+    const job = await mediaProcessingQueue.add(PROCESS_VIDEO_JOB, jobData, {
+        ...VIDEO_PROCESSING_JOB_OPTIONS,
+        jobId,
+    });
+    return String(job.id ?? jobId);
+}
+
+/**
+ * Pings the Render worker so a sleeping free instance starts booting. A
+ * timeout is expected during a cold start; the inbound request alone wakes it.
+ */
+export async function wakeWorker(): Promise<void> {
+    const workerWakeUrl = (
+        process.env.WORKER_PUBLIC_URL ||
+        "https://scroll-maestro-worker.onrender.com"
+    ).replace(/\/$/, "");
+
+    try {
+        await fetch(`${workerWakeUrl}/health`, {
+            method: "GET",
+            headers: {
+                "User-Agent": "Mozilla/5.0 (compatible; ScrollMaestro-Wake/1.0)",
+                "Cache-Control": "no-cache",
+            },
+            signal: AbortSignal.timeout(3000),
+        });
+    } catch {
+        // Expected while Render cold-boots (~40s).
+    }
+}

@@ -86,9 +86,27 @@ async function startWorkers(): Promise<void> {
             "https://scroll-maestro-worker.onrender.com"
         ).replace(/\/$/, "");
 
+        // Only consulted for QUEUED videos past the queue timeout, so this adds
+        // at most a couple of Redis calls per stale video every 4 minutes.
+        const isJobAlive = async (jobId: string): Promise<boolean> => {
+            for (const queue of activityQueues.slice(0, 2)) {
+                const job = await queue.getJob(jobId);
+                if (!job) continue;
+                const state = await job.getState();
+                return (
+                    state === "waiting" ||
+                    state === "active" ||
+                    state === "delayed" ||
+                    state === "prioritized" ||
+                    state === "waiting-children"
+                );
+            }
+            return false;
+        };
+
         reconcileInterval = setInterval(() => {
             void lifecycle
-                .reconcileStaleVideos(prisma)
+                .reconcileStaleVideos(prisma, { isJobAlive })
                 .then((count) => {
                     if (count > 0) {
                         console.warn(`Marked ${count} stale video job(s) as failed.`);

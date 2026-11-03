@@ -40,7 +40,13 @@ Before you call a change done, run the checks that apply to it:
 - **Database imports use relative paths only.** Import `prisma`, the enums (`AspectRatio`, `CaptionStyle`, `CreditReason`, `PublishStatus`, `SocialPlatform`, `VideoStatus`), and the helpers from `packages/database/index`. In the worker (ESM), add `.js`, e.g. `../../../packages/database/index.js`. Do not invent a `@repo/database` alias. If you need another enum, export it from `packages/database/index.ts` first.
 - **Route Handlers, not Server Actions:** write APIs as `src/app/api/.../route.ts` with `export const dynamic = "force-dynamic"`. Do not add new Server Actions. `apps/web/actions/upload.ts` (`getPresignedUploadUrl`, used by `VideoUploader.tsx`) is a known legacy exception. Moving it to a Route Handler is welcome, but only as a deliberate change of its own.
 - **Auth and credits:** resolve the caller with `getOrCreateActor()` from `@/lib/auth`. It handles guests through the `vr_guest_user_id` cookie as well as signed-in users. Scope every query to the actor's user ID. Deduct and refund credits atomically inside `prisma.$transaction(...)`, and write a `CreditTransaction` row.
-- **Video status:** move a video between statuses only through the helpers in `packages/database/videoLifecycle.ts` (`markVideoQueued`, `markVideoProcessing`, `heartbeatVideo`, `markVideoCompleted`, `markVideoFailed`). Do not write `status` directly. Long FFmpeg steps must call `heartbeatVideo`, or `reconcileStaleVideos` marks the job as failed. The timeouts are 45 minutes for processing and 15 minutes for the queue.
+- **Video status:** move a video between statuses only through the helpers in `packages/database/videoLifecycle.ts` (`markVideoProcessing`, `heartbeatVideo`, `markVideoCompleted`, `failVideoAndRefund`). The only exceptions are the conditional `UPLOADING→QUEUED` / `FAILED→QUEUED` claims in the process and retry routes. The rules:
+  - **Job IDs:** generate them with `buildVideoProcessingJobId()`, write them to `Video.bullMqJobId` in the same transaction that charges the credit, and only then enqueue with `enqueueVideoProcessing()` from `@/lib/queues`.
+  - **Failures:** always go through `failVideoAndRefund`. It is idempotent, so the processor, the worker's `failed` event, and the reconciler can all call it without double-refunding.
+  - **Heartbeat:** keep it running for the entire job. If it stops, `reconcileStaleVideos` fails the video after 45 minutes. QUEUED videos are only timed out after 15 minutes if their BullMQ job is gone.
+  - **Final-attempt check:** BullMQ's `job.attemptsMade` counts *finished* attempts, so the current attempt is the last one when `attemptsMade + 1 >= attempts`.
+  - **Unrecoverable errors:** throw `UnrecoverableError` for failures a retry can't fix (no audio, too long, file missing, bad payload) so BullMQ doesn't retry them.
+  - **Credits:** a retry costs a credit like a first run. Failed runs are always refunded.
 - **UI:** use a dark theme only (`#0A0D14` / `slate-950` backgrounds, subtle slate borders, dark surfaces) on every page, modal, and input. Never add unstyled light-mode controls. Icons come from `lucide-react`.
 
 ## 5. Invariants: do not regress
@@ -49,7 +55,10 @@ Before you call a change done, run the checks that apply to it:
 - The upload limits live in **`packages/database/uploadLimits.ts`**: **300 MB** and **45 minutes**. That file is the only source of truth. Import the constants and never hard-code the numbers. The web app enforces both limits before the S3 upload, reading duration from HTML5 video metadata.
 - **Transcription goes only to Groq Whisper:** `POST https://api.groq.com/openai/v1/audio/transcriptions` with `Authorization: Bearer ${GROQ_API_KEY}`, `model: "whisper-large-v3-turbo"`, and `response_format: "verbose_json"`. Never call `127.0.0.1:5001` or any Flask `/transcribe` service.
 - **Audio extraction (`extractAudio`)** always uses `-map 0:a:0 -vn -c:a libmp3lame -b:a 64k -f mp3`, which is about 0.48 MB per minute. That keeps a 45-minute video under Groq's 25 MB limit. Do not raise the bitrate.
-- Highlight extraction uses Gemini (`gemini-3.5-flash-lite` via `@ai-sdk/google`) in `CLIP` mode. `CAPTION_ONLY` mode skips Gemini.
+- Request both `timestamp_granularities[]=word` and `=segment`. With only `word`, segments are omitted and Gemini gets one giant chunk.
+- Highlight extraction uses Gemini (`gemini-3.5-flash-lite` via `@ai-sdk/google`) in `CLIP` mode. `CAPTION_ONLY` mode skips Gemini. Send Gemini only `{start, end, text}` per chunk. Gemini is retried 3 times, then a deterministic transcript-based fallback takes over, so a Gemini outage never fails a video.
+- Thumbnails and caption burns are best-effort. If one fails, the clip ships without it instead of failing the video. Groq, S3, ffprobe, audio extraction, and clip renders retry in-process. Every FFmpeg/ffprobe call has a timeout.
+- FFmpeg reads the source from a fresh presigned URL per call, with `-reconnect` flags. Do **not** add `-reconnect_on_network_error`: it makes ffprobe retry forever on DNS/connect failures.
 
 ### B. Redis and the Upstash command quota (critical)
 Upstash's free tier allows 500k commands a month, and this project has used up that whole quota in under 8 hours before. Every Redis round-trip counts.
