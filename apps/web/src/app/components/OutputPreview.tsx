@@ -142,7 +142,7 @@ export default function OutputPreview({
 
             <p className="mt-4 text-sm leading-relaxed text-muted">
                 {isClips
-                    ? "Usually 3 to 5 clips of 15 to 60 seconds. Each comes with a title, a caption with hashtags and a thumbnail."
+                    ? "Up to 5 clips of 20 to 60 seconds, fewer for short videos. Each comes with a title, a caption with hashtags and a thumbnail."
                     : "One video with captions burned in, the same length as your upload."}
             </p>
         </div>

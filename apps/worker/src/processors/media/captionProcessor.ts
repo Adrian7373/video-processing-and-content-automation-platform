@@ -133,53 +133,92 @@ function escapeFfmpegAssPath(filePath: string): string {
         .replace(/'/g, "'\\\\\\''");
 }
 
+type CaptionLayout = {
+    width: number;
+    height: number;
+    fontSize: number;
+    marginV: number;
+    marginH: number;
+    maxWords: number;
+    maxChars: number;
+};
+
 /**
- * Groups clip-relative words into short, readable phrases (3-4 words max)
+ * Sizes are tuned so a phrase fits on one line (uppercase Liberation Sans Bold
+ * is about 0.68 em per character). Vertical captions sit at roughly 70% of the
+ * frame height, above the TikTok / Shorts caption, username and action bar
+ * that cover the bottom quarter of the screen.
  */
-function chunkWordsIntoPhrases(words: WordTimestamp[], maxWordsPerLine = 4): WordTimestamp[][] {
+function getCaptionLayout(
+    aspectRatio: AspectRatioType,
+    captionStyle: Exclude<CaptionStyleType, "NONE">,
+): CaptionLayout {
+    const base: CaptionLayout =
+        aspectRatio === "VERTICAL_9_16"
+            ? { width: 1080, height: 1920, fontSize: 70, marginV: 520, marginH: 80, maxWords: 4, maxChars: 18 }
+            : aspectRatio === "SQUARE_1_1"
+                ? { width: 1080, height: 1080, fontSize: 62, marginV: 130, marginH: 80, maxWords: 4, maxChars: 21 }
+                : { width: 1920, height: 1080, fontSize: 58, marginV: 90, marginH: 200, maxWords: 6, maxChars: 32 };
+    if (captionStyle !== "MINIMAL") return base;
+    // Sentence case at a smaller size fits about 1.6x the characters.
+    return {
+        ...base,
+        fontSize: Math.round(base.fontSize * 0.82),
+        maxWords: base.maxWords + 3,
+        maxChars: Math.round(base.maxChars * 1.6),
+    };
+}
+
+/**
+ * Groups clip-relative words into short phrases that fit one caption line,
+ * breaking early at punctuation and pauses so each phrase reads as a unit.
+ */
+function chunkWordsIntoPhrases(
+    words: WordTimestamp[],
+    maxWords: number,
+    maxChars: number,
+): WordTimestamp[][] {
     const phrases: WordTimestamp[][] = [];
     let current: WordTimestamp[] = [];
+    let currentChars = 0;
+
+    const flush = () => {
+        if (current.length > 0) phrases.push(current);
+        current = [];
+        currentChars = 0;
+    };
 
     for (let i = 0; i < words.length; i++) {
-        const word = words[i];
-        const normalizedWord = {
-            ...word!,
-            word: word!.word.replace(/\\[Nn]|[\r\n]+/g, " ").trim(),
-        };
-        if (!normalizedWord.word) continue;
+        const word = words[i]!;
+        const text = word.word.replace(/\\[Nn]|[\r\n]+/g, " ").trim();
+        if (!text) continue;
 
-        const candidateLength =
-            current.reduce(
-                (total, phraseWord) => total + phraseWord.word.length + 1,
-                -1,
-            ) + (current.length > 0 ? 1 : 0) + normalizedWord.word.length;
-        if (current.length > 0 && candidateLength > 22) {
-            phrases.push(current);
-            current = [];
-        }
+        if (current.length > 0 && currentChars + 1 + text.length > maxChars) flush();
+        currentChars += (current.length > 0 ? 1 : 0) + text.length;
+        current.push({ ...word, word: text });
 
-        current.push(normalizedWord);
-
-        const nextWord = words[i + 1];
-        const endsWithPunctuation = /[.!?,;:]$/.test(normalizedWord.word);
-        const hasLongPause = nextWord
-            ? nextWord.start - normalizedWord.end > 0.55
-            : false;
+        const next = words[i + 1];
+        const endsSentence = /[.!?…]["'”’)]*$/.test(text);
+        const endsClause = /[,;:]["'”’)]*$/.test(text);
+        const pause = next ? next.start - word.end : 0;
         if (
-            current.length >= maxWordsPerLine ||
-            endsWithPunctuation ||
-            hasLongPause
+            current.length >= maxWords ||
+            endsSentence ||
+            (endsClause && current.length >= 2) ||
+            pause > 0.5
         ) {
-            phrases.push(current);
-            current = [];
+            flush();
         }
     }
 
-    if (current.length > 0) {
-        phrases.push(current);
-    }
-
+    flush();
     return phrases;
+}
+
+/** Bold styles drop trailing commas and full stops (noise on screen) but keep ? and !. */
+function displayWord(text: string, uppercase: boolean): string {
+    if (!uppercase) return escapeAssText(text);
+    return escapeAssText(text.replace(/[.,;:]+(["'”’)]*)$/, "$1").toUpperCase());
 }
 
 /**
@@ -225,41 +264,48 @@ export function buildAssSubtitleContent(
             };
         });
 
-    const resolution =
-        aspectRatio === "VERTICAL_9_16"
-            ? { width: 1080, height: 1920, fontSize: 72, marginV: 180 }
-            : aspectRatio === "SQUARE_1_1"
-                ? { width: 1080, height: 1080, fontSize: 60, marginV: 180 }
-                : { width: 1920, height: 1080, fontSize: 56, marginV: 180 };
+    const layout = getCaptionLayout(aspectRatio, captionStyle);
 
-    // ASS colors use &HAABBGGRR (BGR order!):
+    // ASS colors use &HAABBGGRR (BGR order, alpha 00 = opaque).
     // Yellow: &H0000FFFF | White: &H00FFFFFF | Black: &H00000000
     const isMinimal = captionStyle === "MINIMAL";
+    const uppercase = !isMinimal;
     const primaryColor = captionStyle === "KARAOKE" ? "&H0000FFFF" : "&H00FFFFFF";
     const secondaryColor = "&H00FFFFFF";
-    const outlineWidth = isMinimal ? 3 : 10;
+    const outlineWidth = isMinimal ? 3 : 6;
+    const shadowDepth = isMinimal ? 2 : 3;
 
+    // WrapStyle 0 (smart wrap) is only a safety net: phrases are sized to fit one line.
     const header = `[Script Info]
 ScriptType: v4.00+
-PlayResX: ${resolution.width}
-PlayResY: ${resolution.height}
+PlayResX: ${layout.width}
+PlayResY: ${layout.height}
 ScaledBorderAndShadow: yes
-WrapStyle: 2
+WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,${resolution.fontSize},${primaryColor},${secondaryColor},&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,${outlineWidth},0,2,60,60,${resolution.marginV},1
+Style: Default,Arial,${layout.fontSize},${primaryColor},${secondaryColor},&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,${outlineWidth},${shadowDepth},2,${layout.marginH},${layout.marginH},${layout.marginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
 
-    const phrases = chunkWordsIntoPhrases(relativeWords, 4);
+    const phrases = chunkWordsIntoPhrases(relativeWords, layout.maxWords, layout.maxChars);
     const dialogueLines: string[] = [];
 
-    for (const phrase of phrases) {
+    for (const [phraseIndex, phrase] of phrases.entries()) {
         if (phrase.length === 0) continue;
         const phraseStart = phrase[0]!.start;
-        const phraseEnd = phrase[phrase.length - 1]!.end;
+        const lastWordEnd = phrase[phrase.length - 1]!.end;
+        const nextPhraseStart = phrases[phraseIndex + 1]?.[0]?.start ?? segmentDuration;
+        // Hold the phrase through short gaps so captions do not flicker off
+        // between phrases, but clear it during real pauses.
+        const phraseEnd = Math.min(
+            nextPhraseStart,
+            segmentDuration,
+            Math.max(lastWordEnd + 0.6, phraseStart + 0.5),
+        );
+        if (phraseEnd <= phraseStart) continue;
 
         if (captionStyle === "KARAOKE") {
             let cursor = phraseStart;
@@ -268,7 +314,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
                 const wordDurCs = Math.max(5, Math.round((w.end - w.start) * 100));
                 cursor = w.end;
                 const prefixGap = gapCs > 0 ? `{\\k${gapCs}}` : "";
-                return `${prefixGap}{\\kf${wordDurCs}}${escapeAssText(w.word.toUpperCase())}`;
+                return `${prefixGap}{\\kf${wordDurCs}}${displayWord(w.word, uppercase)}`;
             });
 
             dialogueLines.push(
@@ -276,17 +322,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
             );
         } else if (captionStyle === "HIGHLIGHT") {
             for (let idx = 0; idx < phrase.length; idx++) {
-                const activeWord = phrase[idx];
+                const activeWord = phrase[idx]!;
                 const nextWord = phrase[idx + 1];
-                const eventStart = activeWord!.start;
-                const eventEnd = Math.min(
-                    nextWord?.start ?? phraseEnd,
-                    activeWord!.end,
-                );
+                // Each word stays highlighted until the next one starts, so the
+                // line never blinks off between words.
+                const eventStart = idx === 0 ? phraseStart : activeWord.start;
+                const eventEnd = nextWord ? nextWord.start : phraseEnd;
                 if (eventEnd <= eventStart) continue;
 
                 const renderedWords = phrase.map((w, wIdx) => {
-                    const clean = escapeAssText(w.word.toUpperCase());
+                    const clean = displayWord(w.word, uppercase);
                     return wIdx === idx
                         ? `{\\c&H0000FFFF&\\fscx110\\fscy110}${clean}{\\c&H00FFFFFF&\\fscx100\\fscy100}`
                         : clean;
@@ -297,7 +342,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
                 );
             }
         } else {
-            const text = phrase.map((w) => escapeAssText(w.word)).join(" ");
+            const text = phrase.map((w) => displayWord(w.word, false)).join(" ");
             dialogueLines.push(
                 `Dialogue: 0,${formatAssTime(phraseStart)},${formatAssTime(phraseEnd)},Default,,0,0,0,,${text}`,
             );
@@ -383,11 +428,13 @@ export async function generateAndBurnCaptions(
                 "-preset",
                 "ultrafast",
                 "-crf",
-                "23",
+                "21",
                 "-pix_fmt",
                 "yuv420p",
+                // ultrafast turns the deblocking filter off; turning it back on
+                // removes most visible blockiness for a small CPU cost.
                 "-x264-params",
-                "rc-lookahead=5:ref=1:sync-lookahead=0",
+                "rc-lookahead=5:ref=1:sync-lookahead=0:deblock=1,0,0",
                 "-threads",
                 "1",
                 "-max_muxing_queue_size",

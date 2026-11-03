@@ -33,16 +33,27 @@ import { env } from "../../config/env.js";
 import { jobNames } from "../../constants/queues.js";
 
 import { generateAndBurnCaptions, wordTimestampSchema } from "./captionProcessor.js";
+import {
+    MAX_CLIPS,
+    SEGMENTATION_SYSTEM_PROMPT,
+    buildFallbackClips,
+    buildSegmentationPrompt,
+    buildSentenceChunks,
+    dropHallucinatedSpeech,
+    formatChunksForPrompt,
+    geminiClipSchema,
+    resolveClips,
+    restorePunctuation,
+    targetClipCount,
+    tidyWordTimings,
+    type SelectedClip,
+} from "./clipSelection.js";
 
 const s3Bucket = env.S3_BUCKET_NAME;
 const LOCAL_TMP_DIR = join(process.cwd(), ".tmp");
 
 /** Groq rejects audio uploads above 25 MB. */
 const GROQ_MAX_AUDIO_BYTES = 25 * 1024 * 1024;
-/** Upper bound on clips per video, so one job cannot run unbounded on a 0.1 CPU instance. */
-const MAX_SEGMENTS = 8;
-/** Clips shorter than this are almost always bad timestamps and make FFmpeg emit empty files. */
-const MIN_SEGMENT_SECONDS = 1;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PROBE_TIMEOUT_MS = 2 * 60 * 1000;
 const AUDIO_EXTRACTION_TIMEOUT_MS = 20 * 60 * 1000;
@@ -98,6 +109,9 @@ const transcriptSegmentSchema = z
         end: z.number(),
         text: z.string(),
         words: z.array(wordTimestampSchema).nullable().optional(),
+        no_speech_prob: z.number().optional(),
+        avg_logprob: z.number().optional(),
+        compression_ratio: z.number().optional(),
     })
     .passthrough();
 
@@ -109,22 +123,6 @@ const transcriptResponseSchema = z
     })
     .passthrough();
 
-const structuredDataSchema = z.object({
-    segments: z
-        .array(
-            z.object({
-                segment_title: z.string(),
-                thumbnail_text: z.string(),
-                start_time: z.number(),
-                end_time: z.number(),
-                key_points: z.array(z.string()),
-                social_caption: z.string(),
-            }),
-        )
-        .min(1),
-});
-
-type StructuredSegment = z.infer<typeof structuredDataSchema>["segments"][number];
 type TranscriptSegment = z.infer<typeof transcriptSegmentSchema>;
 type TranscriptWord = z.infer<typeof wordTimestampSchema>;
 
@@ -276,172 +274,31 @@ function getTranscriptSegments(
     ];
 }
 
-/**
- * Only start/end/text go to Gemini. Groq's verbose_json segments also carry
- * token arrays, log-probs and per-word timings, which multiplied prompt size
- * for long videos (slower, costlier, and more likely to time out).
- */
-function buildPromptTranscript(segments: TranscriptSegment[]): string {
-    return JSON.stringify(
-        segments.map((segment) => ({
-            start: round2(segment.start),
-            end: round2(segment.end),
-            text: segment.text,
-        })),
-    );
-}
-
 // ---------------------------------------------------------------------------
-// Segment selection
+// Segment selection (logic lives in clipSelection.ts)
 // ---------------------------------------------------------------------------
 
-function normalizeStructuredSegments(
-    segments: StructuredSegment[],
-    sourceDuration: number,
-    fallbackTitle: string,
-): StructuredSegment[] {
-    const normalized = segments
-        .filter(
-            (segment) =>
-                Number.isFinite(segment.start_time) &&
-                Number.isFinite(segment.end_time) &&
-                segment.end_time > segment.start_time &&
-                segment.start_time < sourceDuration,
-        )
-        .map((segment) => {
-            const title = segment.segment_title.trim() || fallbackTitle;
-            const keyPoints = segment.key_points
-                .map((point) => point.trim())
-                .filter(Boolean)
-                .slice(0, 5);
-            return {
-                segment_title: title.slice(0, 200),
-                thumbnail_text: (segment.thumbnail_text.trim() || "WATCH THIS").slice(0, 100),
-                social_caption: segment.social_caption.trim(),
-                key_points: keyPoints.length > 0 ? keyPoints : [title],
-                start_time: Math.max(0, segment.start_time - 0.25),
-                end_time: Math.min(sourceDuration, segment.end_time + 0.4),
-            };
-        })
-        .filter((segment) => segment.end_time - segment.start_time >= MIN_SEGMENT_SECONDS)
-        .sort((a, b) => a.start_time - b.start_time || a.end_time - b.end_time);
-
-    const distinctSegments: StructuredSegment[] = [];
-    for (const segment of normalized) {
-        const previous = distinctSegments[distinctSegments.length - 1];
-        if (
-            previous &&
-            segment.start_time >= previous.start_time &&
-            segment.end_time <= previous.end_time
-        ) {
-            continue; // duplicate or fully contained
-        }
-        distinctSegments.push(segment);
-    }
-
-    return distinctSegments.slice(0, MAX_SEGMENTS);
-}
-
 /**
- * Deterministic fallback when Gemini is unavailable or keeps returning unusable
- * timestamps: group consecutive transcript chunks into 20–60s clips spread
- * across the video. The user still gets usable clips instead of a failed job.
+ * Gemini sees one numbered sentence per line (index, start-end, text) and
+ * answers with chunk ranges, so clip boundaries always land on sentence
+ * boundaries and never on invented timestamps.
  */
-function buildFallbackSegments(
-    transcriptSegments: TranscriptSegment[],
-    sourceDuration: number,
-    videoTitle: string,
-): StructuredSegment[] {
-    const windows: Array<{ start: number; end: number; text: string }> = [];
-    let current: { start: number; end: number; text: string } | null = null;
-
-    for (const segment of transcriptSegments) {
-        if (!current) {
-            current = { start: segment.start, end: segment.end, text: segment.text };
-        } else if (segment.end - current.start <= 60) {
-            current.end = segment.end;
-            current.text = `${current.text} ${segment.text}`;
-        } else {
-            windows.push(current);
-            current = { start: segment.start, end: segment.end, text: segment.text };
-        }
-        if (current.end - current.start >= 30) {
-            windows.push(current);
-            current = null;
-        }
-    }
-    if (current) windows.push(current);
-
-    const usable = windows.filter((window) => window.end - window.start >= 10);
-    const pool = usable.length > 0 ? usable : windows;
-    const desired = Math.min(3, pool.length);
-    const picked =
-        desired <= 1
-            ? pool.slice(0, 1)
-            : Array.from({ length: desired }, (_, i) =>
-                  pool[Math.round((i * (pool.length - 1)) / (desired - 1))]!,
-              );
-
-    return normalizeStructuredSegments(
-        picked.map((window, index) => {
-            const words = window.text.split(/\s+/).filter(Boolean);
-            const snippet = words.slice(0, 12).join(" ");
-            return {
-                segment_title: `${videoTitle} — Part ${index + 1}`,
-                thumbnail_text: "WATCH THIS",
-                start_time: window.start,
-                end_time: window.end,
-                key_points: [snippet || `${videoTitle} highlight ${index + 1}`],
-                social_caption: `${snippet}${words.length > 12 ? "…" : ""} #shorts #reels #tiktok`,
-            };
-        }),
-        sourceDuration,
-        videoTitle,
-    );
-}
-
-function buildSegmentationPrompt(
-    transcript: string,
-    userPrompt?: string | null,
-): string {
-    const directive = userPrompt?.trim();
-    const selectionRules = directive
-        ? `The user's explicit directive is the #1 selection criterion: "${directive}".
-Only select distinct moments that directly match this directive. Return 3 to 5 clips when the source is long enough, or every distinct matching moment when fewer exist.`
-        : `Identify multiple distinct, high-retention thematic highlights and standalone value bombs across the video. Return 3 to 5 clips when the source is long enough.`;
-
-    return `You are an Expert Short-Form Viral Video Editor & Social Media Strategist. Analyze the timestamped transcript chunks and group them into coherent, standalone short-form video segments.
-
-${selectionRules}
-
-Strict timestamp rules:
-1. Use the exact decimal timestamps (in seconds) from the transcript chunks.
-2. start_time must match the first included chunk's start timestamp.
-3. end_time must match the last included chunk's end timestamp.
-4. Never invent, round, or extrapolate timestamps.
-
-Content rules for every segment:
-1. Each clip must be a complete comedic or narrative arc: start at the setup or beginning of a sentence and end after the punchline, conclusion, or complete thought. Never cut mid-sentence.
-2. Each clip should be 15 to 60 seconds where the source permits; use the complete thought when it naturally requires longer. Do not return tiny or fragmented clips.
-3. segment_title: Create a punchy, specific, viral-worthy clip title.
-4. thumbnail_text: Create a 2 to 5 word hook in ALL CAPS designed for a high-CTR thumbnail, such as "WAIT FOR IT..." or "THE SECRET FLAW".
-5. key_points: Extract 3 to 5 specific bullet points summarizing the core hooks or talking points inside the clip.
-6. social_caption: Write a ready-to-publish social media caption with a strong one-line hook, brief context, and 3 to 5 relevant high-performing hashtags such as #shorts, #reels, or #tiktok.
-
-Transcript chunks:
-${transcript}`;
-}
-
 async function selectClipSegments(params: {
-    transcriptSegments: TranscriptSegment[];
+    words: TranscriptWord[];
+    segments: TranscriptSegment[];
     sourceDuration: number;
     userPrompt: string | null | undefined;
     videoTitle: string;
-}): Promise<StructuredSegment[]> {
-    const prompt = buildSegmentationPrompt(
-        buildPromptTranscript(params.transcriptSegments),
-        params.userPrompt,
-    );
+    language: string | undefined;
+}): Promise<SelectedClip[]> {
+    const chunks = buildSentenceChunks(params.words, params.segments);
+    const maxClips = Math.min(MAX_CLIPS, targetClipCount(params.sourceDuration).max);
+    const prompt = buildSegmentationPrompt({
+        chunksText: formatChunksForPrompt(chunks),
+        sourceDuration: params.sourceDuration,
+        language: params.language,
+        userPrompt: params.userPrompt,
+    });
 
     try {
         return await withRetry(
@@ -449,21 +306,23 @@ async function selectClipSegments(params: {
             async () => {
                 const { object } = await generateObject({
                     model: google("gemini-3.5-flash-lite"),
-                    schema: structuredDataSchema,
+                    schema: geminiClipSchema,
+                    system: SEGMENTATION_SYSTEM_PROMPT,
                     prompt,
                     abortSignal: AbortSignal.timeout(3 * 60 * 1000),
                 });
-                const segments = normalizeStructuredSegments(
-                    object.segments,
-                    params.sourceDuration,
-                    params.videoTitle,
-                );
-                if (segments.length === 0) {
-                    throw new Error(
-                        "Gemini returned no segments with usable timestamps.",
-                    );
+                const clips = resolveClips({
+                    clips: object.clips,
+                    chunks,
+                    words: params.words,
+                    sourceDuration: params.sourceDuration,
+                    maxClips,
+                    fallbackTitle: params.videoTitle,
+                });
+                if (clips.length === 0) {
+                    throw new Error("Gemini returned no clips with usable chunk ranges.");
                 }
-                return segments;
+                return clips;
             },
             { attempts: 3, baseDelayMs: 3000 },
         );
@@ -472,11 +331,12 @@ async function selectClipSegments(params: {
             "Gemini highlight selection failed after retries; using transcript-based fallback clips.",
             error,
         );
-        const fallback = buildFallbackSegments(
-            params.transcriptSegments,
-            params.sourceDuration,
-            params.videoTitle,
-        );
+        const fallback = buildFallbackClips({
+            chunks,
+            words: params.words,
+            sourceDuration: params.sourceDuration,
+            videoTitle: params.videoTitle,
+        });
         if (fallback.length === 0) {
             throw new UnrecoverableError(
                 "Could not find any usable clip in this video. Try Caption-only mode.",
@@ -690,6 +550,12 @@ async function extractAudio(sourceUrl: string, audioPath: string): Promise<void>
             "-map",
             "0:a:0",
             "-vn",
+            // Whisper works on 16 kHz mono, so spend the whole 64 kbps on one
+            // clean channel instead of splitting it across stereo.
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
             "-c:a",
             "libmp3lame",
             "-b:a",
@@ -707,11 +573,11 @@ async function extractAudio(sourceUrl: string, audioPath: string): Promise<void>
 function getAspectRatioFilter(aspectRatio: VideoProcessingJobData["aspectRatio"]): string {
     switch (aspectRatio) {
         case "VERTICAL_9_16":
-            return "crop='min(iw,ih*(9/16))':'min(ih,iw*(16/9))',scale=1080:1920,setsar=1";
+            return "crop='min(iw,ih*(9/16))':'min(ih,iw*(16/9))',scale=1080:1920:flags=lanczos,setsar=1";
         case "SQUARE_1_1":
-            return "crop='min(iw,ih)':'min(iw,ih)',scale=1080:1080,setsar=1";
+            return "crop='min(iw,ih)':'min(iw,ih)',scale=1080:1080:flags=lanczos,setsar=1";
         case "LANDSCAPE_16_9":
-            return "crop='min(iw,ih*(16/9))':'min(ih,iw*(9/16))',scale=1920:1080,setsar=1";
+            return "crop='min(iw,ih*(16/9))':'min(ih,iw*(9/16))',scale=1920:1080:flags=lanczos,setsar=1";
     }
 }
 
@@ -738,16 +604,26 @@ function sliceVideo(
                 "libx264",
                 "-preset",
                 "ultrafast",
+                // CRF 20: this file is also the source of the captioned
+                // render, so it must survive a second encode cleanly.
                 "-crf",
-                "23",
+                "20",
                 "-pix_fmt",
                 "yuv420p",
                 "-threads",
                 "1",
+                // ultrafast disables deblocking; re-enabling it is cheap and
+                // removes most visible blockiness.
                 "-x264-params",
-                "rc-lookahead=5:ref=1:sync-lookahead=0",
+                "rc-lookahead=5:ref=1:sync-lookahead=0:deblock=1,0,0",
                 "-max_muxing_queue_size",
                 "1024",
+                // Platforms play shorts at about -14 LUFS; normalising here
+                // keeps quiet recordings from sounding weak next to others.
+                "-af",
+                "loudnorm=I=-14:TP=-1.5:LRA=11",
+                "-ar",
+                "48000",
                 "-c:a",
                 "aac",
                 "-b:a",
@@ -777,6 +653,9 @@ function extractThumbnail(
     return new Promise((resolve, reject) => {
         ffmpeg(inputPath, { timeout: 120 })
             .seekInput(Math.max(0, timeOffsetSeconds))
+            // Pick the most representative of the next ~2 s of frames instead
+            // of whatever frame lands on the offset (often a blink or blur).
+            .videoFilters("thumbnail=48")
             .frames(1)
             .outputOptions(["-q:v", "2"])
             .on("end", () => resolve())
@@ -866,6 +745,7 @@ async function transcribeAudio(audioPath: string) {
                 });
                 formData.append("model", "whisper-large-v3-turbo");
                 formData.append("response_format", "verbose_json");
+                formData.append("temperature", "0");
                 formData.append("timestamp_granularities[]", "word");
                 formData.append("timestamp_granularities[]", "segment");
 
@@ -1035,8 +915,17 @@ export async function processVideo(
         const transcriptData = await transcribeAudio(audioPath);
         await unlink(audioPath).catch(() => {});
 
-        const transcriptWords = getTranscriptWords(transcriptData);
-        const transcriptSegments = getTranscriptSegments(transcriptData, transcriptWords);
+        const rawWords = getTranscriptWords(transcriptData);
+        const cleaned = dropHallucinatedSpeech(
+            getTranscriptSegments(transcriptData, rawWords),
+            rawWords,
+        );
+        if (cleaned.droppedSegments > 0) {
+            console.log(`Dropped ${cleaned.droppedSegments} transcript segment(s) that look like Whisper hallucinations.`);
+        }
+        const transcriptSegments = cleaned.segments;
+        // Punctuated, de-stretched words: better caption phrasing and sentence-level clip boundaries.
+        const transcriptWords = tidyWordTimings(restorePunctuation(cleaned.words, transcriptSegments));
         const lastSpokenSecond = Math.max(
             transcriptWords[transcriptWords.length - 1]?.end ?? 0,
             transcriptSegments[transcriptSegments.length - 1]?.end ?? 0,
@@ -1050,7 +939,7 @@ export async function processVideo(
         }
         if (global.gc) global.gc();
 
-        let structuredSegments: StructuredSegment[];
+        let structuredSegments: SelectedClip[];
 
         if (processingMode === "CAPTION_ONLY") {
             console.log("CAPTION_ONLY Mode selected. Bypassing Gemini generation.");
@@ -1072,10 +961,12 @@ export async function processVideo(
             }
             console.log("CLIP Mode selected. Asking Gemini to extract highlights...");
             structuredSegments = await selectClipSegments({
-                transcriptSegments,
+                words: transcriptWords,
+                segments: transcriptSegments,
                 sourceDuration,
                 userPrompt,
                 videoTitle,
+                language: transcriptData.language,
             });
         }
         if (global.gc) global.gc();
