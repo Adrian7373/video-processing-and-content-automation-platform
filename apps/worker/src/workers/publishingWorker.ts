@@ -1,5 +1,5 @@
 import { Worker } from "bullmq";
-import { redis } from "../config/redis.js";
+import { lowPollingWorkerOptions } from "../config/workerOptions.js";
 import { queueNames } from "../constants/queues.js";
 import {
     processSocialPublish,
@@ -11,12 +11,7 @@ export const publishingWorker = new Worker<SocialPublishingJobData>(
     async (job) => {
         return processSocialPublish(job);
     },
-    {
-        connection: redis,
-        concurrency: 1,
-        drainDelay: 15,
-        stalledInterval: 60000,
-    },
+    lowPollingWorkerOptions,
 );
 
 publishingWorker.on("completed", (job) => {

@@ -1,6 +1,6 @@
 import { Worker, type Job } from "bullmq";
 
-import { redis } from "../config/redis.js";
+import { lowPollingWorkerOptions } from "../config/workerOptions.js";
 import { queueNames, jobNames } from "../constants/queues.js";
 import {
     processVideo,
@@ -51,23 +51,13 @@ const processMediaJob = async (job: Job<MediaQueueJobData>) => {
 export const mediaWorker = new Worker<MediaQueueJobData, unknown>(
     queueNames.media,
     processMediaJob,
-    {
-        connection: redis,
-        concurrency: 1,
-        drainDelay: 15,
-        stalledInterval: 60000,
-    },
+    lowPollingWorkerOptions,
 );
 
 export const legacyVideoWorker = new Worker<MediaQueueJobData, unknown>(
     queueNames.legacyVideo,
     processMediaJob,
-    {
-        connection: redis,
-        concurrency: 1,
-        drainDelay: 15,
-        stalledInterval: 60000,
-    },
+    lowPollingWorkerOptions,
 );
 
 for (const worker of [mediaWorker, legacyVideoWorker]) {
