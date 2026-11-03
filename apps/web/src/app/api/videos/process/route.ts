@@ -7,8 +7,7 @@ import {
     prisma,
 } from "../../../../../../../packages/database/index";
 import {
-    mediaProcessingQueue,
-    PROCESS_VIDEO_JOB,
+    enqueueMediaProcessingJob,
     type MediaProcessingJobData,
 } from "@/lib/queues";
 import { getOrCreateActor } from "@/lib/auth";
@@ -144,7 +143,7 @@ export async function POST(request: Request) {
 
         deductedUserId = actor.userId;
 
-        const job = await mediaProcessingQueue.add(PROCESS_VIDEO_JOB, jobData, {
+        const job = await enqueueMediaProcessingJob(jobData, {
             attempts: 3,
             backoff: { type: "exponential", delay: 5000 },
             removeOnComplete: 100,

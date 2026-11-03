@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../../../../../../packages/database/index";
 import {
-    mediaProcessingQueue,
-    PROCESS_VIDEO_JOB,
+    enqueueMediaProcessingJob,
     type MediaProcessingJobData,
 } from "@/lib/queues";
 
@@ -36,7 +35,7 @@ export async function POST(
             where: { id },
             data: { status: "PROCESSING", errorMessage: null },
         });
-        const job = await mediaProcessingQueue.add(PROCESS_VIDEO_JOB, payload, {
+        const job = await enqueueMediaProcessingJob(payload, {
             attempts: 3,
             backoff: { type: "exponential", delay: 5000 },
             removeOnComplete: 100,

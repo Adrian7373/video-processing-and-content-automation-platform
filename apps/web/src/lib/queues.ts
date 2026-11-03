@@ -1,4 +1,5 @@
 import { Queue } from "bullmq";
+import type { Job, JobsOptions } from "bullmq";
 import type {
     AspectRatio,
     CaptionStyle,
@@ -12,6 +13,7 @@ export const SOCIAL_PUBLISHING_QUEUE_NAME = "social-publishing";
 export const PROCESS_VIDEO_JOB = "process-video";
 export const CREATE_THUMBNAIL_JOB = "create-thumbnail";
 export const PUBLISH_SOCIAL_POST_JOB = "publish-social-post";
+const QUEUE_COMMAND_TIMEOUT_MS = 10_000;
 
 export interface MediaProcessingJobData {
     videoId: string;
@@ -47,7 +49,10 @@ function getRedisConnectionConfig() {
             ? decodeURIComponent(parsed.password)
             : undefined,
         tls: parsed.protocol === "rediss:" ? {} : undefined,
-        maxRetriesPerRequest: null,
+        connectTimeout: 5_000,
+        commandTimeout: QUEUE_COMMAND_TIMEOUT_MS,
+        maxRetriesPerRequest: 1,
+        enableOfflineQueue: false,
     };
 }
 
@@ -70,6 +75,32 @@ export const socialPublishingQueue =
     new Queue<SocialPublishingJobData>(SOCIAL_PUBLISHING_QUEUE_NAME, {
         connection: getRedisConnectionConfig(),
     });
+
+export async function enqueueMediaProcessingJob(
+    data: MediaProcessingJobData,
+    options: JobsOptions,
+): Promise<Job<MediaProcessingJobData | CreateThumbnailJobData>> {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+        return await Promise.race([
+            mediaProcessingQueue.add(PROCESS_VIDEO_JOB, data, options),
+            new Promise<never>((_, reject) => {
+                timeoutHandle = setTimeout(() => {
+                    reject(
+                        new Error(
+                            `Timed out connecting to the media-processing queue after ${QUEUE_COMMAND_TIMEOUT_MS}ms.`,
+                        ),
+                    );
+                }, QUEUE_COMMAND_TIMEOUT_MS);
+            }),
+        ]);
+    } finally {
+        if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+        }
+    }
+}
 
 if (process.env.NODE_ENV !== "production") {
     globalForQueues.mediaProcessingQueue = mediaProcessingQueue;
