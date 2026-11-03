@@ -33,6 +33,7 @@ import { env } from "../../config/env.js";
 import { jobNames } from "../../constants/queues.js";
 
 import { generateAndBurnCaptions, wordTimestampSchema } from "./captionProcessor.js";
+import { CAPTION_STYLES } from "./captionStyles.js";
 import {
     MAX_CLIPS,
     SEGMENTATION_SYSTEM_PROMPT,
@@ -97,7 +98,7 @@ const videoProcessingJobSchema = z.object({
         .enum(["VERTICAL_9_16", "LANDSCAPE_16_9", "SQUARE_1_1"])
         .default("VERTICAL_9_16"),
     captionStyle: z
-        .enum(["NONE", "KARAOKE", "HIGHLIGHT", "MINIMAL"])
+        .enum(CAPTION_STYLES)
         .default("KARAOKE"),
 });
 

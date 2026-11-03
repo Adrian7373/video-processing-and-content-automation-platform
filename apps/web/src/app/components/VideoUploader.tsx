@@ -19,6 +19,7 @@ import {
 } from "../../../../../packages/database/uploadLimits";
 import type { CreditsStatusResponse } from "@/app/api/credits/route";
 import OutputPreview from "./OutputPreview";
+import CaptionStylePicker from "./CaptionStylePicker";
 
 type UploadStatus = "idle" | "requesting" | "uploading" | "processing" | "error";
 type ProcessingMode = "CLIP" | "CAPTION_ONLY";
@@ -484,8 +485,8 @@ export default function VideoUploader() {
 
     return (
         <>
-            <div className="grid w-full max-w-[1120px] items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] xl:gap-16">
-            <section className="w-full max-w-xl text-ink">
+            <div className="grid w-full max-w-[1120px] items-start gap-10 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] xl:gap-16">
+            <section className="w-full min-w-0 max-w-xl text-ink">
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className="text-balance font-display text-[clamp(32px,2.4vw+16px,44px)] font-medium leading-[1.08] tracking-[-0.03em] text-ink">
@@ -536,7 +537,11 @@ export default function VideoUploader() {
                                     type="button"
                                     role="radio"
                                     aria-checked={mode === value}
-                                    onClick={() => setMode(value)}
+                                    onClick={() => {
+                                        setMode(value);
+                                        // A captioned full video needs captions.
+                                        if (value === "CAPTION_ONLY" && captionStyle === "NONE") setCaptionStyle("KARAOKE");
+                                    }}
                                     disabled={isBusy}
                                     className={`h-9 rounded-md px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50 ${mode === value
                                         ? "bg-raised text-ink shadow-[0_0_0_1px_var(--sm-line-strong)]"
@@ -611,35 +616,31 @@ export default function VideoUploader() {
                         </label>
                     )}
 
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <label className="block">
-                            <span className="mb-2 block text-[13px] font-medium text-ink">Aspect ratio</span>
-                            <select
-                                value={aspectRatio}
-                                onChange={(event) => setAspectRatio(event.target.value as AspectRatio)}
-                                disabled={isBusy}
-                                className="block h-11 w-full rounded-lg border border-line-strong bg-raised px-3 text-base text-ink hover:border-muted focus:border-ink focus:outline-none focus:ring-[3px] focus:ring-action/35 disabled:opacity-50"
-                            >
-                                <option value="VERTICAL_9_16">Vertical 9:16</option>
-                                <option value="LANDSCAPE_16_9">Landscape 16:9</option>
-                                <option value="SQUARE_1_1">Square 1:1</option>
-                            </select>
-                        </label>
+                    <label className="block sm:max-w-[50%]">
+                        <span className="mb-2 block text-[13px] font-medium text-ink">Aspect ratio</span>
+                        <select
+                            value={aspectRatio}
+                            onChange={(event) => setAspectRatio(event.target.value as AspectRatio)}
+                            disabled={isBusy}
+                            className="block h-11 w-full rounded-lg border border-line-strong bg-raised px-3 text-base text-ink hover:border-muted focus:border-ink focus:outline-none focus:ring-[3px] focus:ring-action/35 disabled:opacity-50"
+                        >
+                            <option value="VERTICAL_9_16">Vertical 9:16</option>
+                            <option value="LANDSCAPE_16_9">Landscape 16:9</option>
+                            <option value="SQUARE_1_1">Square 1:1</option>
+                        </select>
+                    </label>
 
-                        <label className="block">
-                            <span className="mb-2 block text-[13px] font-medium text-ink">Caption style</span>
-                            <select
-                                value={captionStyle}
-                                onChange={(event) => setCaptionStyle(event.target.value as CaptionStyle)}
-                                disabled={isBusy}
-                                className="block h-11 w-full rounded-lg border border-line-strong bg-raised px-3 text-base text-ink hover:border-muted focus:border-ink focus:outline-none focus:ring-[3px] focus:ring-action/35 disabled:opacity-50"
-                            >
-                                <option value="KARAOKE">Karaoke</option>
-                                <option value="HIGHLIGHT">Highlight</option>
-                                <option value="MINIMAL">Minimal</option>
-                                {mode === "CLIP" && <option value="NONE">No captions</option>}
-                            </select>
-                        </label>
+                    <div>
+                        <div className="mb-2 flex items-baseline justify-between gap-3">
+                            <span id="caption-style-label" className="text-[13px] font-medium text-ink">Caption style</span>
+                            <span className="text-[13px] text-muted">Hover or tap a style to preview it</span>
+                        </div>
+                        <CaptionStylePicker
+                            value={captionStyle}
+                            onChange={setCaptionStyle}
+                            allowNone={mode === "CLIP"}
+                            disabled={isBusy}
+                        />
                     </div>
 
                     <div className="space-y-3">

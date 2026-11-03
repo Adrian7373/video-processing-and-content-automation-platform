@@ -1,4 +1,5 @@
 import type { AspectRatio, CaptionStyle } from "@/../../packages/database/index";
+import CaptionSample from "./CaptionSample";
 
 type Mode = "CLIP" | "CAPTION_ONLY";
 
@@ -7,8 +8,6 @@ const FRAME_RATIO: Record<AspectRatio, string> = {
     SQUARE_1_1: "aspect-square",
     LANDSCAPE_16_9: "aspect-video",
 };
-
-const SAMPLE_WORDS = ["THIS", "IS", "THE", "PART", "YOU", "KEEP"];
 
 /** Where sample clips sit on the source bar, as fractions of the video. */
 const SAMPLE_CLIPS = [
@@ -39,36 +38,14 @@ function Scene({ tone }: { tone: number }) {
     );
 }
 
-function SampleCaption({ style }: { style: CaptionStyle }) {
+/** Captions sit where the worker burns them: about 70% down a vertical frame, near the bottom otherwise. */
+function SampleCaption({ style, aspectRatio }: { style: CaptionStyle; aspectRatio: AspectRatio }) {
     if (style === "NONE") return null;
-    const shadow = "[text-shadow:0_0_2px_#05080f,0_2px_0_#05080f,2px_0_0_#05080f,-2px_0_0_#05080f,0_-2px_0_#05080f]";
-    if (style === "MINIMAL") {
-        return (
-            <p className="absolute inset-x-[8%] bottom-[14%] text-center text-[clamp(9px,6cqi,14px)] font-medium leading-tight text-white [text-shadow:0_1px_3px_rgba(5,8,15,0.9)]">
-                This is the part you keep
-            </p>
-        );
-    }
     return (
-        <p className={`absolute inset-x-[6%] bottom-[14%] text-center font-display text-[clamp(10px,8.5cqi,20px)] font-bold leading-[1.1] text-white ${shadow}`}>
-            {SAMPLE_WORDS.map((word, i) => (
-                <span key={word}>
-                    <span
-                        className={
-                            style === "KARAOKE"
-                                ? i <= 2
-                                    ? "text-[#ffd338]"
-                                    : ""
-                                : i === 3
-                                    ? "inline-block scale-110 text-[#ffd338]"
-                                    : ""
-                        }
-                    >
-                        {word}
-                    </span>
-                    {i < SAMPLE_WORDS.length - 1 ? " " : null}
-                </span>
-            ))}
+        <p
+            className={`absolute inset-x-[6%] text-center text-[7.6cqi] ${aspectRatio === "VERTICAL_9_16" ? "bottom-[24%]" : "bottom-[9%]"}`}
+        >
+            <CaptionSample style={style} step={1} />
         </p>
     );
 }
@@ -135,7 +112,7 @@ export default function OutputPreview({
                         <span className="absolute left-2 top-2 rounded-md bg-[rgba(5,8,15,0.72)] px-1.5 py-0.5 text-[13px] tabular-nums text-white">
                             {isClips ? ["0:32", "0:47", "0:28"][i] : durationSeconds ? timecode(durationSeconds) : "Full"}
                         </span>
-                        <SampleCaption style={effectiveStyle} />
+                        <SampleCaption style={effectiveStyle} aspectRatio={aspectRatio} />
                     </div>
                 ))}
             </div>

@@ -3,12 +3,24 @@ import { NodeHttpHandler } from "@smithy/node-http-handler";
 import type { Job } from "bullmq";
 import ffmpeg from "fluent-ffmpeg";
 import { spawn } from "node:child_process";
-import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
+import { createReadStream, existsSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { prisma } from "../../../../../packages/database/index.js";
 import { env } from "../../config/env.js";
+import {
+    CAPTION_STYLES,
+    buildAssSubtitleContent,
+    type AspectRatioType,
+    type CaptionStyleType,
+} from "./captionStyles.js";
+
+export { buildAssSubtitleContent, type AspectRatioType, type CaptionStyleType };
+
+/** Bundled caption fonts (Montserrat, Anton), handed to libass via `fontsdir`. */
+const CAPTION_FONTS_DIR = fileURLToPath(new URL("../../../fonts", import.meta.url));
 
 const s3Bucket = env.S3_BUCKET_NAME;
 const LOCAL_TMP_DIR = join(process.cwd(), ".tmp");
@@ -51,8 +63,6 @@ export const wordTimestampSchema = z.object({
 });
 
 export type WordTimestamp = z.infer<typeof wordTimestampSchema>;
-export type CaptionStyleType = "NONE" | "KARAOKE" | "HIGHLIGHT" | "MINIMAL";
-export type AspectRatioType = "VERTICAL_9_16" | "SQUARE_1_1" | "LANDSCAPE_16_9";
 
 export interface GenerateCaptionsOptions {
     inputClipPath: string;
@@ -100,30 +110,6 @@ export function extractThumbnailFromClip(
 }
 
 /**
- * Formats seconds into ASS timestamp format: H:MM:SS.CC (centiseconds)
- */
-function formatAssTime(seconds: number): string {
-    const clamped = Math.max(0, seconds);
-    const hours = Math.floor(clamped / 3600);
-    const minutes = Math.floor((clamped % 3600) / 60);
-    const secs = Math.floor(clamped % 60);
-    const centiseconds = Math.min(99, Math.round((clamped - Math.floor(clamped)) * 100));
-
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${String(centiseconds).padStart(2, "0")}`;
-}
-
-/**
- * Escapes characters that have special meaning in ASS dialogue lines
- */
-function escapeAssText(text: string): string {
-    return text
-        .replace(/\\[Nn]|[\r\n]+/g, " ")
-        .replace(/\\/g, "\\\\")
-        .replace(/\{/g, "\\{")
-        .replace(/\}/g, "\\}");
-}
-
-/**
  * Escapes file paths for FFmpeg's libass filter on Windows & POSIX
  */
 function escapeFfmpegAssPath(filePath: string): string {
@@ -131,225 +117,6 @@ function escapeFfmpegAssPath(filePath: string): string {
         .replace(/\\/g, "/")
         .replace(/^([A-Za-z]):/, "$1\\:")
         .replace(/'/g, "'\\\\\\''");
-}
-
-type CaptionLayout = {
-    width: number;
-    height: number;
-    fontSize: number;
-    marginV: number;
-    marginH: number;
-    maxWords: number;
-    maxChars: number;
-};
-
-/**
- * Sizes are tuned so a phrase fits on one line (uppercase Liberation Sans Bold
- * is about 0.68 em per character). Vertical captions sit at roughly 70% of the
- * frame height, above the TikTok / Shorts caption, username and action bar
- * that cover the bottom quarter of the screen.
- */
-function getCaptionLayout(
-    aspectRatio: AspectRatioType,
-    captionStyle: Exclude<CaptionStyleType, "NONE">,
-): CaptionLayout {
-    const base: CaptionLayout =
-        aspectRatio === "VERTICAL_9_16"
-            ? { width: 1080, height: 1920, fontSize: 70, marginV: 520, marginH: 80, maxWords: 4, maxChars: 18 }
-            : aspectRatio === "SQUARE_1_1"
-                ? { width: 1080, height: 1080, fontSize: 62, marginV: 130, marginH: 80, maxWords: 4, maxChars: 21 }
-                : { width: 1920, height: 1080, fontSize: 58, marginV: 90, marginH: 200, maxWords: 6, maxChars: 32 };
-    if (captionStyle !== "MINIMAL") return base;
-    // Sentence case at a smaller size fits about 1.6x the characters.
-    return {
-        ...base,
-        fontSize: Math.round(base.fontSize * 0.82),
-        maxWords: base.maxWords + 3,
-        maxChars: Math.round(base.maxChars * 1.6),
-    };
-}
-
-/**
- * Groups clip-relative words into short phrases that fit one caption line,
- * breaking early at punctuation and pauses so each phrase reads as a unit.
- */
-function chunkWordsIntoPhrases(
-    words: WordTimestamp[],
-    maxWords: number,
-    maxChars: number,
-): WordTimestamp[][] {
-    const phrases: WordTimestamp[][] = [];
-    let current: WordTimestamp[] = [];
-    let currentChars = 0;
-
-    const flush = () => {
-        if (current.length > 0) phrases.push(current);
-        current = [];
-        currentChars = 0;
-    };
-
-    for (let i = 0; i < words.length; i++) {
-        const word = words[i]!;
-        const text = word.word.replace(/\\[Nn]|[\r\n]+/g, " ").trim();
-        if (!text) continue;
-
-        if (current.length > 0 && currentChars + 1 + text.length > maxChars) flush();
-        currentChars += (current.length > 0 ? 1 : 0) + text.length;
-        current.push({ ...word, word: text });
-
-        const next = words[i + 1];
-        const endsSentence = /[.!?…]["'”’)]*$/.test(text);
-        const endsClause = /[,;:]["'”’)]*$/.test(text);
-        const pause = next ? next.start - word.end : 0;
-        if (
-            current.length >= maxWords ||
-            endsSentence ||
-            (endsClause && current.length >= 2) ||
-            pause > 0.5
-        ) {
-            flush();
-        }
-    }
-
-    flush();
-    return phrases;
-}
-
-/** Bold styles drop trailing commas and full stops (noise on screen) but keep ? and !. */
-function displayWord(text: string, uppercase: boolean): string {
-    if (!uppercase) return escapeAssText(text);
-    return escapeAssText(text.replace(/[.,;:]+(["'”’)]*)$/, "$1").toUpperCase());
-}
-
-/**
- * Builds the complete .ass file string for KARAOKE, HIGHLIGHT, or MINIMAL styles
- */
-export function buildAssSubtitleContent(
-    words: WordTimestamp[],
-    segmentStartTime: number,
-    segmentEndTime: number,
-    captionStyle: Exclude<CaptionStyleType, "NONE">,
-    aspectRatio: AspectRatioType,
-): string {
-    const segmentDuration = Math.max(0.1, segmentEndTime - segmentStartTime);
-
-    // Filter words inside the segment window and shift timestamps to start at 0
-    const relativeWords = words
-        .filter((w) => w.end > segmentStartTime && w.start < segmentEndTime)
-        .map((w) => {
-            const start = Math.max(0, w.start - segmentStartTime);
-            const end = Math.min(segmentDuration, Math.max(start + 0.05, w.end - segmentStartTime));
-            return {
-                word: w.word.replace(/\\[Nn]|[\r\n]+/g, " ").trim(),
-                start,
-                end,
-            };
-        })
-        .filter((w) => w.word.length > 0)
-        .sort((a, b) => a.start - b.start || a.end - b.end)
-        .filter(
-            (word, index, allWords) =>
-                index === 0 ||
-                word.start !== allWords[index - 1]!.start ||
-                word.end !== allWords[index - 1]!.end ||
-                word.word !== allWords[index - 1]!.word,
-        )
-        .map((word, index, allWords) => {
-            const previousEnd = index > 0 ? allWords[index - 1]!.end : 0;
-            const start = Math.max(word.start, previousEnd);
-            return {
-                ...word,
-                start,
-                end: Math.max(start + 0.05, word.end),
-            };
-        });
-
-    const layout = getCaptionLayout(aspectRatio, captionStyle);
-
-    // ASS colors use &HAABBGGRR (BGR order, alpha 00 = opaque).
-    // Yellow: &H0000FFFF | White: &H00FFFFFF | Black: &H00000000
-    const isMinimal = captionStyle === "MINIMAL";
-    const uppercase = !isMinimal;
-    const primaryColor = captionStyle === "KARAOKE" ? "&H0000FFFF" : "&H00FFFFFF";
-    const secondaryColor = "&H00FFFFFF";
-    const outlineWidth = isMinimal ? 3 : 6;
-    const shadowDepth = isMinimal ? 2 : 3;
-
-    // WrapStyle 0 (smart wrap) is only a safety net: phrases are sized to fit one line.
-    const header = `[Script Info]
-ScriptType: v4.00+
-PlayResX: ${layout.width}
-PlayResY: ${layout.height}
-ScaledBorderAndShadow: yes
-WrapStyle: 0
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,${layout.fontSize},${primaryColor},${secondaryColor},&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,${outlineWidth},${shadowDepth},2,${layout.marginH},${layout.marginH},${layout.marginV},1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
-
-    const phrases = chunkWordsIntoPhrases(relativeWords, layout.maxWords, layout.maxChars);
-    const dialogueLines: string[] = [];
-
-    for (const [phraseIndex, phrase] of phrases.entries()) {
-        if (phrase.length === 0) continue;
-        const phraseStart = phrase[0]!.start;
-        const lastWordEnd = phrase[phrase.length - 1]!.end;
-        const nextPhraseStart = phrases[phraseIndex + 1]?.[0]?.start ?? segmentDuration;
-        // Hold the phrase through short gaps so captions do not flicker off
-        // between phrases, but clear it during real pauses.
-        const phraseEnd = Math.min(
-            nextPhraseStart,
-            segmentDuration,
-            Math.max(lastWordEnd + 0.6, phraseStart + 0.5),
-        );
-        if (phraseEnd <= phraseStart) continue;
-
-        if (captionStyle === "KARAOKE") {
-            let cursor = phraseStart;
-            const karaokeTokens = phrase.map((w) => {
-                const gapCs = Math.max(0, Math.round((w.start - cursor) * 100));
-                const wordDurCs = Math.max(5, Math.round((w.end - w.start) * 100));
-                cursor = w.end;
-                const prefixGap = gapCs > 0 ? `{\\k${gapCs}}` : "";
-                return `${prefixGap}{\\kf${wordDurCs}}${displayWord(w.word, uppercase)}`;
-            });
-
-            dialogueLines.push(
-                `Dialogue: 0,${formatAssTime(phraseStart)},${formatAssTime(phraseEnd)},Default,,0,0,0,,${karaokeTokens.join(" ")}`,
-            );
-        } else if (captionStyle === "HIGHLIGHT") {
-            for (let idx = 0; idx < phrase.length; idx++) {
-                const activeWord = phrase[idx]!;
-                const nextWord = phrase[idx + 1];
-                // Each word stays highlighted until the next one starts, so the
-                // line never blinks off between words.
-                const eventStart = idx === 0 ? phraseStart : activeWord.start;
-                const eventEnd = nextWord ? nextWord.start : phraseEnd;
-                if (eventEnd <= eventStart) continue;
-
-                const renderedWords = phrase.map((w, wIdx) => {
-                    const clean = displayWord(w.word, uppercase);
-                    return wIdx === idx
-                        ? `{\\c&H0000FFFF&\\fscx110\\fscy110}${clean}{\\c&H00FFFFFF&\\fscx100\\fscy100}`
-                        : clean;
-                });
-
-                dialogueLines.push(
-                    `Dialogue: 0,${formatAssTime(eventStart)},${formatAssTime(eventEnd)},Default,,0,0,0,,${renderedWords.join(" ")}`,
-                );
-            }
-        } else {
-            const text = phrase.map((w) => displayWord(w.word, false)).join(" ");
-            dialogueLines.push(
-                `Dialogue: 0,${formatAssTime(phraseStart)},${formatAssTime(phraseEnd)},Default,,0,0,0,,${text}`,
-            );
-        }
-    }
-
-    return `${header}\n${dialogueLines.join("\n")}\n`;
 }
 
 /**
@@ -401,6 +168,9 @@ export async function generateAndBurnCaptions(
     const sanitizedInput = inputClipPath.replace(/\\/g, "/");
     const sanitizedOutput = outputClipPath.replace(/\\/g, "/");
     const escapedAssPath = escapeFfmpegAssPath(outputAssPath);
+    const fontsOption = existsSync(CAPTION_FONTS_DIR)
+        ? `:fontsdir='${escapeFfmpegAssPath(CAPTION_FONTS_DIR)}'`
+        : "";
     const aspectRatioFilter =
         aspectRatio === "VERTICAL_9_16"
             ? "crop='min(iw,ih*(9/16))':'min(ih,iw*(16/9))',scale=1080:1920,setsar=1"
@@ -422,7 +192,7 @@ export async function generateAndBurnCaptions(
                 "-i",
                 sanitizedInput,
                 "-vf",
-                `${aspectRatioFilter},ass='${escapedAssPath}'`,
+                `${aspectRatioFilter},ass=filename='${escapedAssPath}'${fontsOption}`,
                 "-c:v",
                 "libx264",
                 "-preset",
@@ -508,7 +278,7 @@ export const captionJobSchema = z.object({
     words: z.array(wordTimestampSchema),
     segmentStartTime: z.number(),
     segmentEndTime: z.number(),
-    captionStyle: z.enum(["NONE", "KARAOKE", "HIGHLIGHT", "MINIMAL"]).default("KARAOKE"),
+    captionStyle: z.enum(CAPTION_STYLES).default("KARAOKE"),
     aspectRatio: z.enum(["VERTICAL_9_16", "SQUARE_1_1", "LANDSCAPE_16_9"]).default("VERTICAL_9_16"),
 });
 

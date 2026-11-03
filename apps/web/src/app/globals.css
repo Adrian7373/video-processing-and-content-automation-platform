@@ -169,6 +169,18 @@ h3 {
   }
 }
 
+@keyframes sm-caption-pop {
+  0% {
+    transform: scale(0.72);
+  }
+  60% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 @keyframes sm-indeterminate {
   0% {
     transform: translateX(-100%);

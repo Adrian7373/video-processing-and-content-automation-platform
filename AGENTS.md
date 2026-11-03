@@ -66,6 +66,12 @@ Before you call a change done, run the checks that apply to it:
   - Gemini gets sentence-level chunks as compact `index|start-end|text` lines (never Groq's raw token/logprob arrays) and answers with **chunk index ranges**, never timestamps. `resolveClips` turns ranges into word-snapped times, enforces 8–90 s, drops clips that overlap a better-scored one, and caps the count by video length (`targetClipCount`, at most `MAX_CLIPS`).
   - The system prompt (`SEGMENTATION_SYSTEM_PROMPT`) treats the transcript as data and puts the creator's request in its own tagged block.
 - Rendering: clips are encoded once from the source at CRF 20 (`ultrafast` with deblocking re-enabled, Lanczos scaling, `loudnorm` to -14 LUFS), then the captioned version at CRF 21 with `-c:a copy`. Captions stay in the platform-UI safe zone (vertical: about 70% of frame height) and each phrase is sized to fit one line.
+- **Caption styles** (`CaptionStyle` enum: `NONE`, `KARAOKE`, `HIGHLIGHT`, `MINIMAL`, `POP`, `MARKER`, `BOX`, `NEON`, `HEADLINE`) are defined once per side and must stay in step:
+  - Worker: `apps/worker/src/processors/media/captionStyles.ts` (ASS specs, pure functions; `CAPTION_STYLES` feeds the Zod schemas).
+  - Web: `apps/web/src/app/components/CaptionSample.tsx` mirrors each look in CSS for the hover-to-play `CaptionStylePicker` and the upload preview.
+  - Adding a style means: the Prisma enum plus a migration in `packages/database/prisma/migrations/`, a spec in `captionStyles.ts`, and a look and label in `CaptionSample.tsx`.
+  - Caption fonts (Montserrat ExtraBold/Black and Anton, OFL licences alongside) are bundled in `apps/worker/fonts` and passed to the `ass` filter as `fontsdir`. Font names in specs must match those files.
+  - libass draws one `BorderStyle 3` box per glyph, so box colours stay opaque (a translucent box shows stripes). Per-word boxes (`MARKER`) are a second, lower layer where only the spoken word's box is visible.
 - Thumbnails and caption burns are best-effort. If one fails, the clip ships without it instead of failing the video. Groq, S3, ffprobe, audio extraction, and clip renders retry in-process. Every FFmpeg/ffprobe call has a timeout.
 - FFmpeg reads the source from a fresh presigned URL per call, with `-reconnect` flags. Do **not** add `-reconnect_on_network_error`: it makes ffprobe retry forever on DNS/connect failures.
 
