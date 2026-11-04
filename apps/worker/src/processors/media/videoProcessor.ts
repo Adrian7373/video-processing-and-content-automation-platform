@@ -5,14 +5,13 @@ import {
 } from "@aws-sdk/client-s3";
 import type { Job } from "bullmq";
 import ffmpeg from "fluent-ffmpeg";
-import { mkdir, rm, readFile, stat } from "node:fs/promises";
-import { createReadStream, createWriteStream, existsSync } from "node:fs";
+import { mkdir, rm, readFile, stat, unlink } from "node:fs/promises";
+import { createReadStream, createWriteStream, existsSync } from "fs";
 import { join } from "node:path";
 import { platform } from "node:os";
 import { execFile, execFileSync, type ExecException } from "node:child_process";
 import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
-import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+import { pipeline } from "stream/promises";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { z } from "zod";
 import axios from "axios";
@@ -188,10 +187,13 @@ async function downloadS3File(
             throw new Error(`S3 object "${s3Key}" did not contain a response body.`);
         }
 
-        const bodyStream = Readable.fromWeb(
-            response.Body.transformToWebStream() as unknown as NodeReadableStream<Uint8Array>,
-        );
-        await pipeline(bodyStream, createWriteStream(downloadPath));
+        if (!(response.Body instanceof Readable)) {
+            throw new Error(
+                `S3 object "${s3Key}" did not return a Node.js readable stream.`,
+            );
+        }
+
+        await pipeline(response.Body, createWriteStream(downloadPath));
     } catch (error) {
         await rm(downloadPath, { force: true });
         throw error;
@@ -514,7 +516,7 @@ export async function processVideo(
     }
 
     await mkdir(LOCAL_TMP_DIR, { recursive: true });
-    const videoPath = join(LOCAL_TMP_DIR, `${job.id}.mp4`).replace(/\\/g, "/");
+    const videoPath = `/tmp/${jobData.videoId}.webm`;
     const audioPath = join(LOCAL_TMP_DIR, `${job.id}.mp3`).replace(/\\/g, "/");
 
     const temporaryFilesToCleanup: string[] = [];
@@ -629,6 +631,9 @@ export async function processVideo(
             groqResponse.data,
         );
         const transcript = JSON.stringify(transcriptData.segments);
+        if (global.gc) {
+            global.gc();
+        }
 
         let structuredSegments: StructuredData["segments"] = [];
 
@@ -671,6 +676,9 @@ export async function processVideo(
                     ),
                 });
             structuredSegments = structuredData.segments;
+        }
+        if (global.gc) {
+            global.gc();
         }
 
         const segmentDataForDb: Array<{
@@ -850,10 +858,10 @@ export async function processVideo(
     } finally {
         if (heartbeatTimer) clearInterval(heartbeatTimer);
         await Promise.all([
-            rm(videoPath, { force: true }),
-            rm(audioPath, { force: true }),
+            unlink(videoPath).catch(() => {}),
+            unlink(audioPath).catch(() => {}),
             ...temporaryFilesToCleanup.map((filePath) =>
-                rm(filePath, { force: true }).catch(() => undefined),
+                unlink(filePath).catch(() => {}),
             ),
         ]);
     }
