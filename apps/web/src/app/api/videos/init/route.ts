@@ -5,6 +5,7 @@ import {
     AspectRatio,
     CaptionStyle,
 } from "../../../../../../../packages/database/index";
+import { MAX_UPLOAD_FILE_SIZE_BYTES } from "../../../../../../../packages/database/uploadLimits";
 import { getOrCreateActor } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,12 @@ export const dynamic = "force-dynamic";
 const initializeVideoSchema = z.object({
     filename: z.string().trim().min(1),
     contentType: z.enum(["video/mp4", "video/quicktime", "video/webm"]),
-    fileSize: z.number().finite().int().nonnegative(),
+    fileSize: z
+        .number()
+        .finite()
+        .int()
+        .nonnegative()
+        .max(MAX_UPLOAD_FILE_SIZE_BYTES, "Video files must not exceed 300 MB."),
     userId: z.string().uuid().optional(),
     userPrompt: z.string().trim().max(1000).optional(),
     aspectRatio: z.nativeEnum(AspectRatio).default("VERTICAL_9_16"),
@@ -34,7 +40,11 @@ export async function POST(request: Request) {
     const parsedBody = initializeVideoSchema.safeParse(body);
     if (!parsedBody.success) {
         return NextResponse.json(
-            { error: "filename, contentType, and fileSize are required." },
+            {
+                error:
+                    parsedBody.error.issues[0]?.message ??
+                    "filename, contentType, and fileSize are required.",
+            },
             { status: 400 },
         );
     }

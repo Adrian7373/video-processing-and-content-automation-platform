@@ -13,6 +13,10 @@ import type {
     AspectRatio,
     CaptionStyle,
 } from "@/../../packages/database/index";
+import {
+    MAX_UPLOAD_DURATION_SECONDS,
+    MAX_UPLOAD_FILE_SIZE_BYTES,
+} from "../../../../../packages/database/uploadLimits";
 import type { CreditsStatusResponse } from "@/app/api/credits/route";
 
 type UploadStatus = "idle" | "requesting" | "uploading" | "processing" | "error";
@@ -166,6 +170,33 @@ export default function VideoUploader() {
         setProgress(0);
     };
 
+    const validateSelectedFile = async (selectedFile: File): Promise<void> => {
+        if (selectedFile.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+            throw new Error("Video files must not exceed 300 MB.");
+        }
+
+        const objectUrl = URL.createObjectURL(selectedFile);
+        try {
+            const duration = await new Promise<number>((resolve, reject) => {
+                const video = document.createElement("video");
+                video.preload = "metadata";
+                video.onloadedmetadata = () => resolve(video.duration);
+                video.onerror = () =>
+                    reject(new Error("Unable to read the video duration."));
+                video.src = objectUrl;
+            });
+
+            if (
+                !Number.isFinite(duration) ||
+                duration > MAX_UPLOAD_DURATION_SECONDS
+            ) {
+                throw new Error("Videos must not exceed 45 minutes.");
+            }
+        } finally {
+            URL.revokeObjectURL(objectUrl);
+        }
+    };
+
     const handleOutOfCredits = (payload?: ApiErrorPayload) => {
         setActor((prev) =>
             prev
@@ -200,6 +231,18 @@ export default function VideoUploader() {
 
         if (!file) {
             setErrorMessage("Please select a video file first.");
+            setStatus("error");
+            return;
+        }
+
+        try {
+            await validateSelectedFile(file);
+        } catch (error) {
+            setErrorMessage(
+                error instanceof Error
+                    ? error.message
+                    : "The selected video does not meet the upload limits.",
+            );
             setStatus("error");
             return;
         }
@@ -448,7 +491,7 @@ export default function VideoUploader() {
                 <form className="space-y-5" onSubmit={handleSubmit}>
                     <label className="block">
                         <span className="mb-2 block text-xs font-semibold text-slate-300">
-                            Video file (MP4, MOV, WebM)
+                            Video file (MP4, MOV, WebM; max 300 MB, 45 minutes)
                         </span>
                         <input
                             type="file"

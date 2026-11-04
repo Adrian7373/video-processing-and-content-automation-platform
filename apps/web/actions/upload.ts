@@ -3,8 +3,8 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { z } from "zod";
+import { MAX_UPLOAD_FILE_SIZE_BYTES } from "../../../packages/database/uploadLimits";
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
 const allowedVideoTypes = ["video/mp4", "video/quicktime", "video/webm"] as const;
 
 const uploadMetadataSchema = z.object({
@@ -17,7 +17,10 @@ const uploadMetadataSchema = z.object({
         .finite()
         .int()
         .nonnegative()
-        .max(MAX_FILE_SIZE, "Video files must not exceed 2 GB."),
+        .max(
+            MAX_UPLOAD_FILE_SIZE_BYTES,
+            "Video files must not exceed 300 MB.",
+        ),
 });
 
 export interface UploadMetadata {

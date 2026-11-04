@@ -1,0 +1,2 @@
+export const MAX_UPLOAD_FILE_SIZE_BYTES = 300 * 1024 * 1024;
+export const MAX_UPLOAD_DURATION_SECONDS = 45 * 60;
