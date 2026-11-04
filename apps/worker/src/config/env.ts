@@ -9,4 +9,15 @@ const envSchema = z.object({
     FLASK_API_URL: z.string().url().default("http://127.0.0.1:5001"),
 });
 
-export const env = envSchema.parse(process.env);
+const parsedEnv = envSchema.parse(process.env);
+
+if (
+    process.env.NODE_ENV === "production" &&
+    !process.env.FLASK_API_URL
+) {
+    throw new Error(
+        "FLASK_API_URL must be configured in production. It must be the reachable URL of the transcriber service, not localhost.",
+    );
+}
+
+export const env = parsedEnv;
