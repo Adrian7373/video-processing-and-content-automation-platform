@@ -1,11 +1,9 @@
 import http from "http";
-import { redis } from "./config/redis.js";
-import { mediaWorker, legacyVideoWorker } from "./workers/mediaWorker.js";
-import { publishingWorker } from "./workers/publishingWorker.js";
-import { prisma } from "../../../packages/database/index.js";
-import { reconcileStaleVideos } from "../../../packages/database/videoLifecycle.js";
 
 let isShuttingDown = false;
+let reconcileInterval: NodeJS.Timeout | undefined;
+let closeWorkers: (() => Promise<void>) | undefined;
+let disconnectServices: (() => Promise<void>) | undefined;
 
 const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     if (isShuttingDown) {
@@ -15,14 +13,9 @@ const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     isShuttingDown = true;
     console.log(`Received ${signal}; shutting down workers.`);
 
-    await Promise.all([
-        mediaWorker.close(),
-        legacyVideoWorker.close(),
-        publishingWorker.close(),
-    ]);
-    clearInterval(reconcileInterval);
-    await prisma.$disconnect();
-    await redis.quit();
+    if (closeWorkers) await closeWorkers();
+    if (reconcileInterval) clearInterval(reconcileInterval);
+    if (disconnectServices) await disconnectServices();
 };
 
 process.once("SIGINT", () => {
@@ -33,29 +26,71 @@ process.once("SIGTERM", () => {
     void shutdown("SIGTERM");
 });
 
-console.log(
-    "Worker listening on media-processing, video-processing, and publishing queues.",
-);
-const reconcileInterval = setInterval(() => {
-    void reconcileStaleVideos(prisma)
-        .then((count) => {
-            if (count > 0) {
-                console.warn(`Marked ${count} stale video job(s) as failed.`);
-            }
-        })
-        .catch((error: unknown) => {
-            console.error("Failed to reconcile stale video jobs.", error);
-        });
-}, 60_000);
-reconcileInterval.unref();
 const PORT = Number(process.env.PORT) || 8080;
 
 const server = http.createServer((req, res) => {
-    res.writeHead(200);
-    res.end("Worker is alive and listening!");
-});
+    if (req.url === "/health" || req.url === "/") {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end("Worker is alive and listening!");
+        return;
+    }
 
+    res.writeHead(404);
+    res.end("Not found");
+});
 
 server.listen(PORT, "0.0.0.0", () => {
     console.log(`Health check server listening on 0.0.0.0:${PORT}`);
+    void startWorkers();
 });
+
+server.on("error", (error) => {
+    console.error("Worker health server failed to start.", error);
+    process.exitCode = 1;
+});
+
+async function startWorkers(): Promise<void> {
+    try {
+        const [{ redis }, media, publishing, { prisma }, lifecycle] =
+            await Promise.all([
+                import("./config/redis.js"),
+                import("./workers/mediaWorker.js"),
+                import("./workers/publishingWorker.js"),
+                import("../../../packages/database/index.js"),
+                import("../../../packages/database/videoLifecycle.js"),
+            ]);
+
+        closeWorkers = async () => {
+            await Promise.all([
+                media.mediaWorker.close(),
+                media.legacyVideoWorker.close(),
+                publishing.publishingWorker.close(),
+            ]);
+        };
+        disconnectServices = async () => {
+            await prisma.$disconnect();
+            await redis.quit();
+        };
+
+        reconcileInterval = setInterval(() => {
+            void lifecycle
+                .reconcileStaleVideos(prisma)
+                .then((count) => {
+                    if (count > 0) {
+                        console.warn(`Marked ${count} stale video job(s) as failed.`);
+                    }
+                })
+                .catch((error: unknown) => {
+                    console.error("Failed to reconcile stale video jobs.", error);
+                });
+        }, 60_000);
+        reconcileInterval.unref();
+
+        console.log(
+            "Worker listening on media-processing, video-processing, and publishing queues.",
+        );
+    } catch (error) {
+        console.error("Worker failed to initialize.", error);
+        server.close(() => process.exit(1));
+    }
+}

@@ -28,5 +28,6 @@ COPY apps/worker ./apps/worker
 # 6. Generate Prisma Client
 RUN npx prisma generate --schema=packages/database/prisma/schema.prisma
 
-# 7. Start the worker
+# 7. Start the worker web service. The worker binds Render's PORT (default 8080).
+EXPOSE 8080
 CMD ["npm", "run", "start", "--workspace=apps/worker"]
