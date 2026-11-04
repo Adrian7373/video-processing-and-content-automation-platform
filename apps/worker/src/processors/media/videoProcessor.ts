@@ -592,6 +592,8 @@ export async function processVideo(
             filename: "audio.mp3",
             contentType: "audio/mpeg",
         });
+        formData.append("model", "whisper-large-v3-turbo");
+        formData.append("response_format", "verbose_json");
 
         const contentLength = await new Promise<number>((resolve, reject) => {
             formData.getLength((error, length) => {
@@ -606,9 +608,6 @@ export async function processVideo(
                 resolve(length);
             });
         });
-
-        formData.append("model", "whisper-large-v3-turbo");
-        formData.append("response_format", "verbose_json");
 
         // Send directly to Groq's OpenAI-compatible endpoint
         const groqResponse = await axios.post(
