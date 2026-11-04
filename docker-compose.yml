@@ -19,17 +19,6 @@ services:
     volumes:
       - redis_data:/data
 
-  transcriber:
-    build:
-      context: ./apps/transcriber
-    restart: unless-stopped
-    environment:
-      WHISPER_DEVICE: ${WHISPER_DEVICE:-cpu}
-      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
-      WHISPER_MODEL_SIZE: ${WHISPER_MODEL_SIZE:-large-v3}
-    ports:
-      - "5001:5001"
-
 volumes:
   postgres_data:
   redis_data:

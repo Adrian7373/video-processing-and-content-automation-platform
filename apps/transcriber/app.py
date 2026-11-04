@@ -33,11 +33,6 @@ class TranscriptionResponse(TypedDict):
     words: list[WordTimestamp]
 
 
-@app.get("/health")
-def health() -> tuple[Any, int]:
-    return jsonify({"status": "ok"}), 200
-
-
 @lru_cache(maxsize=1)
 def get_whisper_model() -> WhisperModel:
     return WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
