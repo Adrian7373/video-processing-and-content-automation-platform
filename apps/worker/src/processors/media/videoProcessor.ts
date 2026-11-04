@@ -21,6 +21,10 @@ import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 import { prisma, CreditReason } from "../../../../../packages/database/index.js";
 import {
+    MAX_UPLOAD_DURATION_SECONDS,
+    MAX_UPLOAD_FILE_SIZE_BYTES,
+} from "../../../../../packages/database/uploadLimits.js";
+import {
     heartbeatVideo,
     markVideoCompleted,
     markVideoProcessing,
@@ -236,6 +240,48 @@ function getVideoDurationSeconds(
     });
 }
 
+function probeVideoDuration(videoPath: string): Promise<number> {
+    if (!ffprobeExecutablePath) {
+        return Promise.reject(
+            new Error("ffprobe executable path is not configured."),
+        );
+    }
+
+    const probeExecutablePath = ffprobeExecutablePath;
+    return new Promise((resolve, reject) => {
+        execFile(
+            probeExecutablePath,
+            [
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                videoPath,
+            ],
+            { windowsHide: true },
+            (error: ExecException | null, stdout: string, stderr: string) => {
+                if (error) {
+                    reject(
+                        new Error(
+                            `Unable to inspect video duration: ${stderr.trim() || error.message}`,
+                        ),
+                    );
+                    return;
+                }
+
+                const duration = Number.parseFloat(stdout.trim());
+                if (!Number.isFinite(duration) || duration < 0) {
+                    reject(new Error("ffprobe returned an invalid video duration."));
+                    return;
+                }
+                resolve(duration);
+            },
+        );
+    });
+}
+
 function extractAudio(videoPath: string, audioPath: string): Promise<void> {
     console.log("Extracting audio...");
     if (!ffmpegExecutablePath || !ffprobeExecutablePath) {
@@ -302,7 +348,7 @@ function extractAudio(videoPath: string, audioPath: string): Promise<void> {
                     "-c:a",
                     "libmp3lame",
                     "-b:a",
-                    "128k",
+                    "64k",
                     "-f",
                     "mp3",
                     audioPath,
@@ -528,9 +574,18 @@ export async function processVideo(
         );
 
         await downloadS3File(jobData.s3Key, videoPath);
+        const sourceFileStats = await stat(videoPath);
+        if (sourceFileStats.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+            throw new Error("Video files must not exceed 300 MB.");
+        }
+
+        const sourceDuration = await probeVideoDuration(videoPath);
+        if (sourceDuration > MAX_UPLOAD_DURATION_SECONDS) {
+            throw new Error("Videos must not exceed 45 minutes.");
+        }
         await extractAudio(videoPath, audioPath);
 
-        console.log(`Sending audio to Flask for transcription...`);
+        console.log(`Sending audio to Groq for transcription...`);
         const audioBuffer = await readFile(audioPath);
         const formData = new FormData();
         formData.append("file", audioBuffer, {
@@ -552,23 +607,27 @@ export async function processVideo(
             });
         });
 
-        const flaskUrl = env.FLASK_API_URL;
-        const flaskResponse = await axios.post(
-            `${flaskUrl}/transcribe`,
+        formData.append("model", "whisper-large-v3-turbo");
+        formData.append("response_format", "verbose_json");
+
+        // Send directly to Groq's OpenAI-compatible endpoint
+        const groqResponse = await axios.post(
+            "https://api.groq.com/openai/v1/audio/transcriptions",
             formData,
             {
                 headers: {
                     ...formData.getHeaders(),
                     "Content-Length": contentLength,
+                    Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
                 },
                 maxBodyLength: Infinity,
                 maxContentLength: Infinity,
-                timeout: 30 * 60 * 1000,
+                timeout: 5 * 60 * 1000, // 5 minutes (Groq usually finishes in <5s)
             },
         );
 
         const transcriptData = transcriptResponseSchema.parse(
-            flaskResponse.data,
+            groqResponse.data,
         );
         const transcript = JSON.stringify(transcriptData.segments);
 
