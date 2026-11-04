@@ -126,8 +126,12 @@ export async function POST(request: Request) {
             await tx.video.update({
                 where: { id: video.id },
                 data: {
-                    status: "PROCESSING",
+                    status: "QUEUED",
                     errorMessage: null,
+                    errorCode: null,
+                    processingAttempt: 0,
+                    bullMqJobId: null,
+                    lastHeartbeatAt: new Date(),
                     userPrompt: jobData.userPrompt ?? null,
                     aspectRatio: jobData.aspectRatio,
                     captionStyle: jobData.captionStyle,
@@ -148,6 +152,10 @@ export async function POST(request: Request) {
             attempts: 3,
             backoff: { type: "exponential", delay: 5000 },
             removeOnComplete: 100,
+        });
+        await prisma.video.updateMany({
+            where: { id: video.id, status: "QUEUED" },
+            data: { bullMqJobId: String(job.id), lastHeartbeatAt: new Date() },
         });
 
         return NextResponse.json(
@@ -201,6 +209,9 @@ export async function POST(request: Request) {
                         where: { id: requestData.videoId },
                         data: {
                             status: "FAILED",
+                            errorCode: "QUEUE_SUBMISSION_FAILED",
+                            failedAt: new Date(),
+                            lastHeartbeatAt: null,
                             errorMessage:
                                 error instanceof Error
                                     ? error.message

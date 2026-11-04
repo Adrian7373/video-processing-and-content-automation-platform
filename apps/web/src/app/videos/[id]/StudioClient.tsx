@@ -46,7 +46,7 @@ type Segment = {
 type Video = {
     id: string;
     title: string;
-    status: "UPLOADING" | "PROCESSING" | "COMPLETED" | "FAILED";
+    status: "UPLOADING" | "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
     aspectRatio: "VERTICAL_9_16" | "LANDSCAPE_16_9" | "SQUARE_1_1";
     segments: Segment[];
 };
@@ -383,7 +383,12 @@ export default function StudioClient({ videoId }: { videoId: string }) {
     }, [load]);
 
     useEffect(() => {
-        if (!video || (video.status !== "PROCESSING" && video.status !== "UPLOADING"))
+        if (
+            !video ||
+            (video.status !== "PROCESSING" &&
+                video.status !== "QUEUED" &&
+                video.status !== "UPLOADING")
+        )
             return;
         const interval = window.setInterval(() => void load(), 4000);
         return () => window.clearInterval(interval);

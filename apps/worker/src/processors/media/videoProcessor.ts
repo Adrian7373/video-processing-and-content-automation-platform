@@ -20,6 +20,11 @@ import FormData from "form-data";
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 import { prisma, CreditReason } from "../../../../../packages/database/index.js";
+import {
+    heartbeatVideo,
+    markVideoCompleted,
+    markVideoProcessing,
+} from "../../../../../packages/database/videoLifecycle.js";
 import { env } from "../../config/env.js";
 import { jobNames } from "../../constants/queues.js";
 
@@ -467,6 +472,7 @@ export async function processVideo(
     const audioPath = join(LOCAL_TMP_DIR, `${job.id}.mp3`).replace(/\\/g, "/");
 
     const temporaryFilesToCleanup: string[] = [];
+    let heartbeatTimer: NodeJS.Timeout | undefined;
 
     try {
         const parentVideo = await prisma.video.findUnique({
@@ -481,6 +487,18 @@ export async function processVideo(
         if (!parentVideo) {
             throw new Error(`Video "${jobData.videoId}" was not found.`);
         }
+
+        await markVideoProcessing(prisma, jobData.videoId, String(job.id));
+        heartbeatTimer = setInterval(() => {
+            void heartbeatVideo(prisma, jobData.videoId, String(job.id)).catch(
+                (heartbeatError: unknown) => {
+                    console.error(
+                        `Failed to update heartbeat for video ${jobData.videoId}.`,
+                        heartbeatError,
+                    );
+                },
+            );
+        }, 30_000);
 
         const rawJobData = job.data as Record<string, unknown>;
         const rawPrompt = jobData.userPrompt ?? parentVideo.userPrompt;
@@ -711,10 +729,7 @@ export async function processVideo(
                 data: segmentDataForDb,
             });
 
-            await transaction.video.update({
-                where: { id: jobData.videoId },
-                data: { status: "COMPLETED" },
-            });
+            await markVideoCompleted(transaction, jobData.videoId, String(job.id));
         });
 
         return { status: "completed" };
@@ -724,30 +739,42 @@ export async function processVideo(
 
         if (attemptsExhausted) {
             try {
-                await prisma.$transaction([
-                    prisma.video.update({
-                        where: { id: jobData.videoId },
+                await prisma.$transaction(async (transaction) => {
+                    const updated = await transaction.video.updateMany({
+                        where: {
+                            id: jobData.videoId,
+                            bullMqJobId: String(job.id),
+                            status: "PROCESSING",
+                        },
                         data: {
                             status: "FAILED",
+                            errorCode:
+                                error instanceof Error && error.name
+                                    ? error.name
+                                    : "PROCESSING_FAILED",
                             errorMessage:
                                 error instanceof Error
                                     ? error.message
                                     : String(error),
+                            failedAt: new Date(),
+                            lastHeartbeatAt: null,
                         },
-                    }),
-                    prisma.user.update({
+                    });
+                    if (updated.count === 0) return;
+
+                    await transaction.user.update({
                         where: { id: jobData.userId },
                         data: { credits: { increment: 1 } },
-                    }),
-                    prisma.creditTransaction.create({
+                    });
+                    await transaction.creditTransaction.create({
                         data: {
                             userId: jobData.userId,
                             amount: 1,
                             reason: CreditReason.REFUND_FAILED_JOB,
                             videoId: jobData.videoId,
                         },
-                    }),
-                ]);
+                    });
+                });
             } catch (statusError) {
                 console.error(
                     `Failed to mark video ${jobData.videoId} as FAILED and refund credit.`,
@@ -763,6 +790,7 @@ export async function processVideo(
 
         throw error;
     } finally {
+        if (heartbeatTimer) clearInterval(heartbeatTimer);
         await Promise.all([
             rm(videoPath, { force: true }),
             rm(audioPath, { force: true }),

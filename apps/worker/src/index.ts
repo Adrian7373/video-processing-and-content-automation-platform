@@ -2,6 +2,8 @@ import http from "http";
 import { redis } from "./config/redis.js";
 import { mediaWorker, legacyVideoWorker } from "./workers/mediaWorker.js";
 import { publishingWorker } from "./workers/publishingWorker.js";
+import { prisma } from "../../../packages/database/index.js";
+import { reconcileStaleVideos } from "../../../packages/database/videoLifecycle.js";
 
 let isShuttingDown = false;
 
@@ -18,6 +20,8 @@ const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
         legacyVideoWorker.close(),
         publishingWorker.close(),
     ]);
+    clearInterval(reconcileInterval);
+    await prisma.$disconnect();
     await redis.quit();
 };
 
@@ -32,6 +36,18 @@ process.once("SIGTERM", () => {
 console.log(
     "Worker listening on media-processing, video-processing, and publishing queues.",
 );
+const reconcileInterval = setInterval(() => {
+    void reconcileStaleVideos(prisma)
+        .then((count) => {
+            if (count > 0) {
+                console.warn(`Marked ${count} stale video job(s) as failed.`);
+            }
+        })
+        .catch((error: unknown) => {
+            console.error("Failed to reconcile stale video jobs.", error);
+        });
+}, 60_000);
+reconcileInterval.unref();
 const PORT = Number(process.env.PORT) || 8080;
 
 const server = http.createServer((req, res) => {

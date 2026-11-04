@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../../../../../../packages/database/index";
+import { getOrCreateActor } from "@/lib/auth";
 import {
     mediaProcessingQueue,
     PROCESS_VIDEO_JOB,
@@ -15,7 +16,10 @@ export async function POST(
     const { id } = await context.params;
 
     try {
-        const video = await prisma.video.findUnique({ where: { id } });
+        const actor = await getOrCreateActor();
+        const video = await prisma.video.findFirst({
+            where: { id, userId: actor.userId },
+        });
         if (!video) {
             return NextResponse.json({ error: "Video not found." }, { status: 404 });
         }
@@ -34,12 +38,25 @@ export async function POST(
 
         await prisma.video.update({
             where: { id },
-            data: { status: "PROCESSING", errorMessage: null },
+            data: {
+                status: "QUEUED",
+                errorMessage: null,
+                errorCode: null,
+                failedAt: null,
+                completedAt: null,
+                processingStartedAt: null,
+                bullMqJobId: null,
+                lastHeartbeatAt: new Date(),
+            },
         });
         const job = await mediaProcessingQueue.add(PROCESS_VIDEO_JOB, payload, {
             attempts: 3,
             backoff: { type: "exponential", delay: 5000 },
             removeOnComplete: 100,
+        });
+        await prisma.video.updateMany({
+            where: { id, status: "QUEUED" },
+            data: { bullMqJobId: String(job.id), lastHeartbeatAt: new Date() },
         });
 
         return NextResponse.json({ queued: true, jobId: job.id }, { status: 202 });
@@ -50,6 +67,9 @@ export async function POST(
             data: {
                 status: "FAILED",
                 errorMessage: error instanceof Error ? error.message : String(error),
+                errorCode: "RETRY_QUEUE_FAILED",
+                failedAt: new Date(),
+                lastHeartbeatAt: null,
             },
         }).catch((statusError: unknown) => console.error("Failed to persist retry error.", statusError));
         return NextResponse.json({ error: "Unable to retry video." }, { status: 503 });

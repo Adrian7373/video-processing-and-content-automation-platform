@@ -77,6 +77,8 @@ export default async function VideosPage({
                 aspectRatio: video.aspectRatio,
                 captionStyle: video.captionStyle,
                 errorMessage: video.errorMessage,
+                errorCode: video.errorCode,
+                lastHeartbeatAt: video.lastHeartbeatAt,
                 createdAt: video.createdAt,
                 thumbnailUrl,
                 _count: { segments: video._count.segments },

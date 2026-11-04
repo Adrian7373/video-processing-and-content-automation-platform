@@ -36,7 +36,9 @@ export default function HomeClient({
     useEffect(() => {
         const hasActiveJobs = videos.some(
             (video) =>
-                video.status === "UPLOADING" || video.status === "PROCESSING",
+                video.status === "UPLOADING" ||
+                video.status === "QUEUED" ||
+                video.status === "PROCESSING",
         );
         if (!hasActiveJobs) return;
 
@@ -111,6 +113,7 @@ export default function HomeClient({
                                 const isCompleted = video.status === "COMPLETED";
                                 const isProcessing =
                                     video.status === "UPLOADING" ||
+                                    video.status === "QUEUED" ||
                                     video.status === "PROCESSING";
                                 const isFailed = video.status === "FAILED";
                                 const clipCount = video._count.segments;
@@ -176,7 +179,13 @@ export default function HomeClient({
                                             {isProcessing && (
                                                 <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-2 bg-slate-950/90 px-3 py-1.5 text-xs font-medium text-amber-300 backdrop-blur-sm">
                                                     <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" aria-hidden="true" />
-                                                    <span>{video.status === "UPLOADING" ? "Uploading video..." : "Extracting clips..."}</span>
+                                                    <span>
+                                                        {video.status === "UPLOADING"
+                                                            ? "Uploading video..."
+                                                            : video.status === "QUEUED"
+                                                                ? "Queued for processing..."
+                                                                : "Extracting clips..."}
+                                                    </span>
                                                 </div>
                                             )}
 

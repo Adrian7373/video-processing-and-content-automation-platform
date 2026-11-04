@@ -8,11 +8,13 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 export type VideoCard = {
     id: string;
     title: string;
-    status: "UPLOADING" | "PROCESSING" | "COMPLETED" | "FAILED";
+    status: "UPLOADING" | "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
     userPrompt: string | null;
     aspectRatio: string;
     captionStyle: string;
     errorMessage: string | null;
+    errorCode?: string | null;
+    lastHeartbeatAt?: Date | string | null;
     createdAt: Date | string;
     thumbnailUrl?: string | null;
     _count: { segments: number };
@@ -51,7 +53,9 @@ export default function VideosLibrary({
     useEffect(() => {
         const hasActiveJobs = videos.some(
             (video) =>
-                video.status === "UPLOADING" || video.status === "PROCESSING",
+                video.status === "UPLOADING" ||
+                video.status === "QUEUED" ||
+                video.status === "PROCESSING",
         );
         if (!hasActiveJobs) return;
 
@@ -121,6 +125,7 @@ export default function VideosLibrary({
                         const isCompleted = video.status === "COMPLETED";
                         const isProcessing =
                             video.status === "UPLOADING" ||
+                            video.status === "QUEUED" ||
                             video.status === "PROCESSING";
                         const isFailed = video.status === "FAILED";
                         const clipCount = video._count.segments;
@@ -188,7 +193,11 @@ export default function VideosLibrary({
                                         <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-2 bg-slate-950/90 px-3 py-1.5 text-xs font-medium text-amber-300 backdrop-blur-sm">
                                             <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" aria-hidden="true" />
                                             <span>
-                                                {video.status === "UPLOADING" ? "Uploading video..." : "Extracting clips..."}
+                                                {video.status === "UPLOADING"
+                                                    ? "Uploading video..."
+                                                    : video.status === "QUEUED"
+                                                        ? "Queued for processing..."
+                                                        : "Extracting clips..."}
                                             </span>
                                         </div>
                                     )}

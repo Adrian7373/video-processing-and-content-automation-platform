@@ -13,6 +13,7 @@ enum TikTokPublishType {
 
 enum VideoStatus {
   UPLOADING
+  QUEUED
   PROCESSING
   COMPLETED
   FAILED
@@ -135,6 +136,13 @@ model Video {
   aspectRatio  AspectRatio  @default(VERTICAL_9_16)
   captionStyle CaptionStyle @default(KARAOKE)
   errorMessage String?      @db.Text
+  errorCode    String?
+  processingStartedAt DateTime?
+  completedAt  DateTime?
+  failedAt     DateTime?
+  lastHeartbeatAt DateTime?
+  processingAttempt Int @default(0)
+  bullMqJobId  String?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -142,6 +150,7 @@ model Video {
   segments VideoSegment[]
 
   @@index([userId])
+  @@index([status, lastHeartbeatAt])
 }
 
 model VideoSegment {
