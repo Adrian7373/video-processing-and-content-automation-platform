@@ -72,6 +72,8 @@ async function startWorkers(): Promise<void> {
             await redis.quit();
         };
 
+        const workerPublicUrl = process.env.WORKER_PUBLIC_URL;
+
         reconcileInterval = setInterval(() => {
             void lifecycle
                 .reconcileStaleVideos(prisma)
@@ -83,7 +85,14 @@ async function startWorkers(): Promise<void> {
                 .catch((error: unknown) => {
                     console.error("Failed to reconcile stale video jobs.", error);
                 });
-        }, 60_000);
+
+            if (workerPublicUrl) {
+                fetch(`${workerPublicUrl.replace(/\/$/, "")}/health`, {
+                    headers: { "User-Agent": "ScrollMaestro-KeepAlive/1.0" },
+                }).catch(() => { });
+            }
+
+        }, 5 * 60_000);
         reconcileInterval.unref();
 
         console.log(

@@ -158,6 +158,18 @@ export async function POST(request: Request) {
             data: { bullMqJobId: String(job.id), lastHeartbeatAt: new Date() },
         });
 
+        // Wake up Render Free Web Service worker via inbound HTTP request
+        const workerWakeUrl = process.env.WORKER_PUBLIC_URL;
+        if (workerWakeUrl) {
+            fetch(`${workerWakeUrl.replace(/\/$/, "")}/health`, {
+                method: "GET",
+                headers: { "User-Agent": "ScrollMaestro-Web-Trigger/1.0" },
+                signal: AbortSignal.timeout(4000),
+            }).catch(() => {
+                // Ignore timeout if Render takes >4s to cold-start; the inbound request alone triggers spin-up
+            });
+        }
+
         return NextResponse.json(
             {
                 jobId: job.id,
