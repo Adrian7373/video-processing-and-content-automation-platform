@@ -110,7 +110,11 @@ function formatAssTime(seconds: number): string {
  * Escapes characters that have special meaning in ASS dialogue lines
  */
 function escapeAssText(text: string): string {
-    return text.replace(/\\/g, "\\\\").replace(/\{/g, "\\{").replace(/\}/g, "\\}");
+    return text
+        .replace(/\\[Nn]|[\r\n]+/g, " ")
+        .replace(/\\/g, "\\\\")
+        .replace(/\{/g, "\\{")
+        .replace(/\}/g, "\\}");
 }
 
 /**
@@ -132,13 +136,34 @@ function chunkWordsIntoPhrases(words: WordTimestamp[], maxWordsPerLine = 4): Wor
 
     for (let i = 0; i < words.length; i++) {
         const word = words[i];
-        current.push(word!);
+        const normalizedWord = {
+            ...word!,
+            word: word!.word.replace(/\\[Nn]|[\r\n]+/g, " ").trim(),
+        };
+        if (!normalizedWord.word) continue;
+
+        const candidateLength =
+            current.reduce(
+                (total, phraseWord) => total + phraseWord.word.length + 1,
+                -1,
+            ) + (current.length > 0 ? 1 : 0) + normalizedWord.word.length;
+        if (current.length > 0 && candidateLength > 22) {
+            phrases.push(current);
+            current = [];
+        }
+
+        current.push(normalizedWord);
 
         const nextWord = words[i + 1];
-        const endsWithPunctuation = /[.!?,;:]$/.test(word!.word);
-        const hasLongPause = nextWord ? nextWord.start - word!.end > 0.55 : false;
-
-        if (current.length >= maxWordsPerLine || endsWithPunctuation || hasLongPause) {
+        const endsWithPunctuation = /[.!?,;:]$/.test(normalizedWord.word);
+        const hasLongPause = nextWord
+            ? nextWord.start - normalizedWord.end > 0.55
+            : false;
+        if (
+            current.length >= maxWordsPerLine ||
+            endsWithPunctuation ||
+            hasLongPause
+        ) {
             phrases.push(current);
             current = [];
         }
@@ -169,16 +194,37 @@ export function buildAssSubtitleContent(
         .map((w) => {
             const start = Math.max(0, w.start - segmentStartTime);
             const end = Math.min(segmentDuration, Math.max(start + 0.05, w.end - segmentStartTime));
-            return { word: w.word.trim(), start, end };
+            return {
+                word: w.word.replace(/\\[Nn]|[\r\n]+/g, " ").trim(),
+                start,
+                end,
+            };
         })
-        .filter((w) => w.word.length > 0);
+        .filter((w) => w.word.length > 0)
+        .sort((a, b) => a.start - b.start || a.end - b.end)
+        .filter(
+            (word, index, allWords) =>
+                index === 0 ||
+                word.start !== allWords[index - 1]!.start ||
+                word.end !== allWords[index - 1]!.end ||
+                word.word !== allWords[index - 1]!.word,
+        )
+        .map((word, index, allWords) => {
+            const previousEnd = index > 0 ? allWords[index - 1]!.end : 0;
+            const start = Math.max(word.start, previousEnd);
+            return {
+                ...word,
+                start,
+                end: Math.max(start + 0.05, word.end),
+            };
+        });
 
     const resolution =
         aspectRatio === "VERTICAL_9_16"
-            ? { width: 1080, height: 1920, fontSize: 72, marginV: 320 }
+            ? { width: 1080, height: 1920, fontSize: 72, marginV: 180 }
             : aspectRatio === "SQUARE_1_1"
-                ? { width: 1080, height: 1080, fontSize: 60, marginV: 140 }
-                : { width: 1920, height: 1080, fontSize: 56, marginV: 90 };
+                ? { width: 1080, height: 1080, fontSize: 60, marginV: 180 }
+                : { width: 1920, height: 1080, fontSize: 56, marginV: 180 };
 
     // ASS colors use &HAABBGGRR (BGR order!):
     // Yellow: &H0000FFFF | White: &H00FFFFFF | Black: &H00000000
@@ -201,7 +247,7 @@ Style: Default,Arial,${resolution.fontSize},${primaryColor},${secondaryColor},&H
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
 
-    const phrases = chunkWordsIntoPhrases(relativeWords, isMinimal ? 6 : 4);
+    const phrases = chunkWordsIntoPhrases(relativeWords, 4);
     const dialogueLines: string[] = [];
 
     for (const phrase of phrases) {
@@ -227,7 +273,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
                 const activeWord = phrase[idx];
                 const nextWord = phrase[idx + 1];
                 const eventStart = activeWord!.start;
-                const eventEnd = nextWord ? nextWord.start : phraseEnd;
+                const eventEnd = Math.min(
+                    nextWord?.start ?? phraseEnd,
+                    activeWord!.end,
+                );
+                if (eventEnd <= eventStart) continue;
 
                 const renderedWords = phrase.map((w, wIdx) => {
                     const clean = escapeAssText(w.word.toUpperCase());
@@ -298,6 +348,12 @@ export async function generateAndBurnCaptions(
     const sanitizedInput = inputClipPath.replace(/\\/g, "/");
     const sanitizedOutput = outputClipPath.replace(/\\/g, "/");
     const escapedAssPath = escapeFfmpegAssPath(outputAssPath);
+    const aspectRatioFilter =
+        aspectRatio === "VERTICAL_9_16"
+            ? "crop='min(iw,ih*(9/16))':'min(ih,iw*(16/9))',scale=1080:1920,setsar=1"
+            : aspectRatio === "SQUARE_1_1"
+                ? "crop='min(iw,ih)':'min(iw,ih)',scale=1080:1080,setsar=1"
+                : "crop='min(iw,ih*(16/9))':'min(ih,iw*(9/16))',scale=1920:1080,setsar=1";
 
     if (global.gc) {
         global.gc();
@@ -313,7 +369,7 @@ export async function generateAndBurnCaptions(
                 "-i",
                 sanitizedInput,
                 "-vf",
-                `ass='${escapedAssPath}'`,
+                `${aspectRatioFilter},ass='${escapedAssPath}'`,
                 "-c:v",
                 "libx264",
                 "-preset",

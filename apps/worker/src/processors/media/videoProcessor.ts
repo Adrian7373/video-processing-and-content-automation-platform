@@ -102,12 +102,39 @@ function getTranscriptWords(
     transcriptData: z.infer<typeof transcriptResponseSchema>,
 ): z.infer<typeof wordTimestampSchema>[] {
     if (transcriptData.words && transcriptData.words.length > 0) {
-        return transcriptData.words;
+        return normalizeTranscriptWords(transcriptData.words);
     }
 
-    return (transcriptData.segments ?? []).flatMap(
-        (segment) => segment.words ?? [],
+    return normalizeTranscriptWords(
+        (transcriptData.segments ?? []).flatMap(
+            (segment) => segment.words ?? [],
+        ),
     );
+}
+
+function normalizeTranscriptWords(
+    words: z.infer<typeof wordTimestampSchema>[],
+): z.infer<typeof wordTimestampSchema>[] {
+    return words
+        .filter(
+            (word) =>
+                Number.isFinite(word.start) &&
+                Number.isFinite(word.end) &&
+                word.end > word.start &&
+                word.word.trim().length > 0,
+        )
+        .map((word) => ({
+            ...word,
+            word: word.word.replace(/\\[Nn]|[\r\n]+/g, " ").trim(),
+        }))
+        .sort((a, b) => a.start - b.start || a.end - b.end)
+        .filter(
+            (word, index, sorted) =>
+                index === 0 ||
+                word.start !== sorted[index - 1]!.start ||
+                word.end !== sorted[index - 1]!.end ||
+                word.word !== sorted[index - 1]!.word,
+        );
 }
 
 function getTranscriptSegments(
@@ -115,7 +142,20 @@ function getTranscriptSegments(
     words: z.infer<typeof wordTimestampSchema>[],
 ): z.infer<typeof transcriptSegmentSchema>[] {
     if (transcriptData.segments && transcriptData.segments.length > 0) {
-        return transcriptData.segments;
+        return [...transcriptData.segments]
+            .filter((segment) => segment.end > segment.start)
+            .map((segment) => ({
+                ...segment,
+                text: segment.text.replace(/\\[Nn]|[\r\n]+/g, " ").trim(),
+            }))
+            .sort((a, b) => a.start - b.start || a.end - b.end)
+            .filter(
+                (segment, index, sorted) =>
+                    index === 0 ||
+                    segment.start !== sorted[index - 1]!.start ||
+                    segment.end !== sorted[index - 1]!.end ||
+                    segment.text !== sorted[index - 1]!.text,
+            );
     }
 
     if (words.length === 0) {
@@ -130,6 +170,49 @@ function getTranscriptSegments(
             words,
         },
     ];
+}
+
+function normalizeStructuredSegments(
+    segments: StructuredData["segments"],
+    sourceDuration: number,
+): StructuredData["segments"] {
+    const normalized = segments
+        .filter(
+            (segment) =>
+                Number.isFinite(segment.start_time) &&
+                Number.isFinite(segment.end_time) &&
+                segment.end_time > segment.start_time,
+        )
+        .map((segment) => ({
+            ...segment,
+            start_time: Math.max(0, segment.start_time - 0.25),
+            end_time: Math.min(sourceDuration, segment.end_time + 0.4),
+        }))
+        .filter((segment) => segment.end_time > segment.start_time)
+        .sort((a, b) => a.start_time - b.start_time || a.end_time - b.end_time);
+
+    const distinctSegments: StructuredData["segments"] = [];
+    for (const segment of normalized) {
+        const previous = distinctSegments[distinctSegments.length - 1];
+        if (!previous) {
+            distinctSegments.push(segment);
+            continue;
+        }
+
+        const isDuplicate =
+            segment.start_time === previous.start_time &&
+            segment.end_time === previous.end_time;
+        const isContained =
+            segment.start_time >= previous.start_time &&
+            segment.end_time <= previous.end_time;
+        if (isDuplicate || isContained) {
+            continue;
+        }
+
+        distinctSegments.push(segment);
+    }
+
+    return distinctSegments;
 }
 
 let ffmpegExecutablePath: string | undefined;
@@ -406,9 +489,9 @@ function buildSegmentationPrompt(
 ): string {
     const directive = userPrompt?.trim();
     const selectionRules = directive
-        ? `The user's explicit directive is the primary filter for selecting segments: "${directive}".
-Only extract segments that match this directive. Prioritize moments that satisfy the directive, have a natural hook at the beginning, and reach a clean resolution at the end. Prefer short-form clips between 15 and 90 seconds unless a natural thought requires slightly longer.`
-        : `Identify the most engaging, high-retention thematic highlights and standalone value bombs across the video. Select moments with a natural hook at the beginning and a clean resolution at the end.`;
+        ? `The user's explicit directive is the #1 selection criterion: "${directive}".
+Only select distinct moments that directly match this directive. Return 3 to 5 clips when the source is long enough, or every distinct matching moment when fewer exist.`
+        : `Identify multiple distinct, high-retention thematic highlights and standalone value bombs across the video. Return 3 to 5 clips when the source is long enough.`;
 
     return `You are an Expert Short-Form Viral Video Editor & Social Media Strategist. Analyze the timestamped transcript chunks and group them into coherent, standalone short-form video segments.
 
@@ -421,10 +504,12 @@ Strict timestamp rules:
 4. Never invent, round, or extrapolate timestamps.
 
 Content rules for every segment:
-1. segment_title: Create a punchy, specific, viral-worthy clip title.
-2. thumbnail_text: Create a 2 to 5 word hook in ALL CAPS designed for a high-CTR thumbnail, such as "WAIT FOR IT..." or "THE SECRET FLAW".
-3. key_points: Extract 3 to 5 specific bullet points summarizing the core hooks or talking points inside the clip.
-4. social_caption: Write a ready-to-publish social media caption with a strong one-line hook, brief context, and 3 to 5 relevant high-performing hashtags such as #shorts, #reels, or #tiktok.
+1. Each clip must be a complete comedic or narrative arc: start at the setup or beginning of a sentence and end after the punchline, conclusion, or complete thought. Never cut mid-sentence.
+2. Each clip should be 15 to 60 seconds where the source permits; use the complete thought when it naturally requires longer. Do not return tiny or fragmented clips.
+3. segment_title: Create a punchy, specific, viral-worthy clip title.
+4. thumbnail_text: Create a 2 to 5 word hook in ALL CAPS designed for a high-CTR thumbnail, such as "WAIT FOR IT..." or "THE SECRET FLAW".
+5. key_points: Extract 3 to 5 specific bullet points summarizing the core hooks or talking points inside the clip.
+6. social_caption: Write a ready-to-publish social media caption with a strong one-line hook, brief context, and 3 to 5 relevant high-performing hashtags such as #shorts, #reels, or #tiktok.
 
 Transcript chunks:
 ${transcript}`;
@@ -702,7 +787,10 @@ export async function processVideo(
                         effectiveJobData.userPrompt,
                     ),
                 });
-            structuredSegments = structuredData.segments;
+            structuredSegments = normalizeStructuredSegments(
+                structuredData.segments,
+                sourceDuration,
+            );
         }
         if (global.gc) {
             global.gc();
