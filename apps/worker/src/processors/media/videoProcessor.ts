@@ -65,6 +65,7 @@ const transcriptSegmentSchema = z
         start: z.number(),
         end: z.number(),
         text: z.string(),
+        words: z.array(wordTimestampSchema).optional(),
     })
     .passthrough();
 
@@ -96,6 +97,16 @@ const structuredDataSchema = z
     .passthrough();
 
 type StructuredData = z.infer<typeof structuredDataSchema>;
+
+function getTranscriptWords(
+    transcriptData: z.infer<typeof transcriptResponseSchema>,
+): z.infer<typeof wordTimestampSchema>[] {
+    if (transcriptData.words && transcriptData.words.length > 0) {
+        return transcriptData.words;
+    }
+
+    return transcriptData.segments.flatMap((segment) => segment.words ?? []);
+}
 
 let ffmpegExecutablePath: string | undefined;
 let ffprobeExecutablePath: string | undefined;
@@ -581,6 +592,7 @@ export async function processVideo(
         });
         formData.append("model", "whisper-large-v3-turbo");
         formData.append("response_format", "verbose_json");
+        formData.append("timestamp_granularities[]", "word");
 
         const contentLength = await new Promise<number>((resolve, reject) => {
             formData.getLength((error, length) => {
@@ -615,6 +627,7 @@ export async function processVideo(
         const transcriptData = transcriptResponseSchema.parse(
             groqResponse.data,
         );
+        const transcriptWords = getTranscriptWords(transcriptData);
         await unlink(audioPath).catch(() => {});
         const transcript = JSON.stringify(transcriptData.segments);
         if (global.gc) {
@@ -728,8 +741,7 @@ export async function processVideo(
             // 1. Generate and Burn Captions
             if (
                 effectiveJobData.captionStyle !== "NONE" &&
-                transcriptData.words &&
-                transcriptData.words.length > 0
+                transcriptWords.length > 0
             ) {
                 const assPath = join(
                     LOCAL_TMP_DIR,
@@ -745,7 +757,7 @@ export async function processVideo(
                     inputClipPath: rawClipPath,
                     outputClipPath: captionedPath,
                     outputAssPath: assPath,
-                    words: transcriptData.words,
+                    words: transcriptWords,
                     segmentStartTime: segment.start_time,
                     segmentEndTime: segment.end_time,
                     captionStyle: effectiveJobData.captionStyle,
