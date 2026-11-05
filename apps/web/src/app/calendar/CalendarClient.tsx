@@ -84,6 +84,8 @@ interface CalendarClientProps {
     initialAccounts: CalendarSocialAccountItem[];
 }
 
+const CLIPS_PER_PAGE = 10;
+
 type DragPayload =
     | { type: "CLIP"; clip: CalendarClipItem }
     | { type: "POST"; post: CalendarScheduledPostItem };
@@ -588,6 +590,7 @@ export default function CalendarClient({
     const [posts, setPosts] =
         useState<CalendarScheduledPostItem[]>(initialPosts);
     const [searchQuery, setSearchQuery] = useState("");
+    const [clipPage, setClipPage] = useState(1);
     const [onlyUnscheduled, setOnlyUnscheduled] = useState(false);
     const [platformFilter, setPlatformFilter] = useState<
         SocialPlatformType | "ALL"
@@ -679,6 +682,16 @@ export default function CalendarClient({
             return true;
         });
     }, [initialClips, searchQuery, onlyUnscheduled, scheduledCountByClipId]);
+
+    const totalClipPages = Math.max(
+        1,
+        Math.ceil(filteredClips.length / CLIPS_PER_PAGE),
+    );
+    const validClipPage = Math.min(clipPage, totalClipPages);
+    const paginatedClips = filteredClips.slice(
+        (validClipPage - 1) * CLIPS_PER_PAGE,
+        validClipPage * CLIPS_PER_PAGE,
+    );
 
     // Monthly KPI Summary
     const monthMetrics = useMemo(() => {
@@ -891,9 +904,10 @@ export default function CalendarClient({
                                 <input
                                     type="checkbox"
                                     checked={onlyUnscheduled}
-                                    onChange={(e) =>
-                                        setOnlyUnscheduled(e.target.checked)
-                                    }
+                                    onChange={(e) => {
+                                        setOnlyUnscheduled(e.target.checked);
+                                        setClipPage(1);
+                                    }}
                                     className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-400 focus:ring-2 focus:ring-sky-400 focus:ring-offset-0"
                                 />
                                 Unscheduled only
@@ -916,7 +930,10 @@ export default function CalendarClient({
                             <input
                                 type="search"
                                 value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onChange={(e) => {
+                                    setSearchQuery(e.target.value);
+                                    setClipPage(1);
+                                }}
                                 aria-label="Search clips by title"
                                 placeholder="Search clips or source video..."
                                 className="block w-full rounded-xl border border-slate-800 bg-slate-950/90 py-2 pl-9 pr-3 text-xs text-slate-100 placeholder:text-slate-500 transition focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
@@ -959,7 +976,7 @@ export default function CalendarClient({
                                 </p>
                             </div>
                         ) : (
-                            filteredClips.map((clip) => (
+                            paginatedClips.map((clip) => (
                                 <DraggableClipCard
                                     key={clip.id}
                                     clip={clip}
@@ -973,6 +990,33 @@ export default function CalendarClient({
                             ))
                         )}
                     </div>
+                    {filteredClips.length > CLIPS_PER_PAGE && (
+                        <div className="flex items-center justify-between border-t border-slate-800/90 px-4 py-3">
+                            <button
+                                type="button"
+                                onClick={() => setClipPage((page) => Math.max(1, page - 1))}
+                                disabled={validClipPage === 1}
+                                className="rounded-lg border border-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                Previous
+                            </button>
+                            <span className="text-xs text-slate-400" aria-live="polite">
+                                Page {validClipPage} of {totalClipPages}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setClipPage((page) =>
+                                        Math.min(totalClipPages, page + 1),
+                                    )
+                                }
+                                disabled={validClipPage === totalClipPages}
+                                className="rounded-lg border border-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    )}
                 </aside>
 
                 {/* RIGHT MAIN WORKSPACE: Calendar */}
@@ -1057,7 +1101,10 @@ export default function CalendarClient({
                         >
                             <button
                                 type="button"
-                                onClick={() => setPlatformFilter("ALL")}
+                                onClick={() => {
+                                    setPlatformFilter("ALL");
+                                    setClipPage(1);
+                                }}
                                 className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${platformFilter === "ALL"
                                     ? "border-sky-400/60 bg-sky-400/15 text-sky-200"
                                     : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700 hover:text-slate-200"
@@ -1077,11 +1124,12 @@ export default function CalendarClient({
                                     <button
                                         key={platform}
                                         type="button"
-                                        onClick={() =>
+                                        onClick={() => {
                                             setPlatformFilter(
                                                 active ? "ALL" : platform,
-                                            )
-                                        }
+                                            );
+                                            setClipPage(1);
+                                        }}
                                         className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${active
                                             ? meta.activeRing
                                             : "border-slate-800 bg-slate-900/90 text-slate-400 hover:border-slate-700 hover:text-slate-200"
