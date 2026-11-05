@@ -627,6 +627,8 @@ export async function processVideo(
             },
         );
 
+        await unlink(audioPath).catch(() => {});
+
         const transcriptData = transcriptResponseSchema.parse(
             groqResponse.data,
         );

@@ -2,6 +2,7 @@ import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import type { Job } from "bullmq";
 import ffmpeg from "fluent-ffmpeg";
+import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import { join } from "node:path";
@@ -283,7 +284,7 @@ export async function generateAndBurnCaptions(
     }
 
     // 2. Generate .ass subtitle file
-    const assContent = buildAssSubtitleContent(
+    let assContent = buildAssSubtitleContent(
         words,
         segmentStartTime,
         segmentEndTime,
@@ -291,27 +292,65 @@ export async function generateAndBurnCaptions(
         aspectRatio,
     );
     await fs.writeFile(outputAssPath, assContent, "utf8");
+    assContent = "";
 
     // 3. Burn into video with FFmpeg
     const sanitizedInput = inputClipPath.replace(/\\/g, "/");
     const sanitizedOutput = outputClipPath.replace(/\\/g, "/");
     const escapedAssPath = escapeFfmpegAssPath(outputAssPath);
 
+    if (global.gc) {
+        global.gc();
+    }
+
     await new Promise<void>((resolve, reject) => {
-        ffmpeg(sanitizedInput)
-            .videoFilters(`ass='${escapedAssPath}'`)
-            .outputOptions([
-                "-c:v libx264",
-                "-preset veryfast",
-                "-crf 23",
-                "-pix_fmt yuv420p",
-                "-c:a copy",
-                "-movflags +faststart",
-            ])
-            .output(sanitizedOutput)
-            .on("end", () => resolve())
-            .on("error", (err) => reject(err))
-            .run();
+        const ffmpegProcess = spawn(
+            process.env.FFMPEG_PATH ?? "ffmpeg",
+            [
+                "-y",
+                "-threads",
+                "1",
+                "-i",
+                sanitizedInput,
+                "-vf",
+                `ass='${escapedAssPath}'`,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
+                "-x264-params",
+                "rc-lookahead=10:sync-lookahead=0",
+                "-threads",
+                "1",
+                "-c:a",
+                "copy",
+                "-movflags",
+                "+faststart",
+                sanitizedOutput,
+            ],
+            { stdio: ["ignore", "ignore", "pipe"], windowsHide: true },
+        );
+        let stderrTail = "";
+
+        ffmpegProcess.stderr.on("data", (chunk: Buffer | string) => {
+            stderrTail = `${stderrTail}${chunk.toString()}`.slice(-2048);
+        });
+        ffmpegProcess.once("error", reject);
+        ffmpegProcess.once("close", (code, signal) => {
+            if (code === 0) {
+                resolve();
+                return;
+            }
+            reject(
+                new Error(
+                    `FFmpeg caption rendering failed (${signal ?? `exit code ${code}`}): ${stderrTail.trim() || "no diagnostic output"}`,
+                ),
+            );
+        });
     });
 
     // 4. Extract thumbnail from the captioned video if requested

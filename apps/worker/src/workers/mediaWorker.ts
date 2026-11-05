@@ -21,17 +21,30 @@ export type MediaQueueJobData =
     | CaptionProcessingJobData
     | ThumbnailProcessingJobData;
 
+let mediaJobLock = Promise.resolve();
+
 // 2. Cast the job to the correct specific type based on job.name
 const processMediaJob = async (job: Job<MediaQueueJobData>) => {
-    switch (job.name) {
-        case jobNames.processVideo:
-            return processVideo(job as Job<VideoProcessingJobData>);
-        case jobNames.createCaption:
-            return processCaption(job as Job<CaptionProcessingJobData>);
-        case jobNames.createThumbnail:
-            return processThumbnail(job as Job<ThumbnailProcessingJobData>);
-        default:
-            throw new Error(`Unsupported media job "${job.name}".`);
+    let releaseLock!: () => void;
+    const previousJob = mediaJobLock;
+    mediaJobLock = new Promise<void>((resolve) => {
+        releaseLock = resolve;
+    });
+
+    await previousJob;
+    try {
+        switch (job.name) {
+            case jobNames.processVideo:
+                return await processVideo(job as Job<VideoProcessingJobData>);
+            case jobNames.createCaption:
+                return await processCaption(job as Job<CaptionProcessingJobData>);
+            case jobNames.createThumbnail:
+                return await processThumbnail(job as Job<ThumbnailProcessingJobData>);
+            default:
+                throw new Error(`Unsupported media job "${job.name}".`);
+        }
+    } finally {
+        releaseLock();
     }
 };
 
@@ -40,7 +53,7 @@ export const mediaWorker = new Worker<MediaQueueJobData, unknown>(
     processMediaJob,
     {
         connection: redis,
-        concurrency: 2,
+        concurrency: 1,
         drainDelay: 30,
         stalledInterval: 300000,
     },
@@ -51,7 +64,7 @@ export const legacyVideoWorker = new Worker<MediaQueueJobData, unknown>(
     processMediaJob,
     {
         connection: redis,
-        concurrency: 2,
+        concurrency: 1,
         drainDelay: 30,
         stalledInterval: 300000,
     },

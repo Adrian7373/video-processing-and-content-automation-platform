@@ -13,7 +13,7 @@ export const publishingWorker = new Worker<SocialPublishingJobData>(
     },
     {
         connection: redis,
-        concurrency: 3,
+        concurrency: 1,
         drainDelay: 30,
         stalledInterval: 300000,
     },
