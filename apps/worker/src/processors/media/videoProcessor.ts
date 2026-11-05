@@ -1,17 +1,17 @@
 import {
     GetObjectCommand,
+    HeadObjectCommand,
     PutObjectCommand,
     S3Client,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Job } from "bullmq";
 import ffmpeg from "fluent-ffmpeg";
-import { mkdir, rm, readFile, stat, unlink } from "node:fs/promises";
-import { createReadStream, createWriteStream, existsSync } from "fs";
+import { mkdir, stat, unlink } from "node:fs/promises";
+import { createReadStream, existsSync } from "fs";
 import { join } from "node:path";
 import { platform } from "node:os";
 import { execFile, execFileSync, type ExecException } from "node:child_process";
-import { Readable } from "node:stream";
-import { pipeline } from "stream/promises";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { z } from "zod";
 import axios from "axios";
@@ -158,48 +158,32 @@ function configureFfmpeg(): void {
 
 configureFfmpeg();
 
-async function downloadS3File(
-    s3Key: string,
-    downloadPath: string,
-): Promise<void> {
+async function getS3VideoUrl(s3Key: string): Promise<string> {
     if (!s3Bucket) {
         throw new Error("S3_BUCKET_NAME must be configured.");
     }
 
-    const abortController = new AbortController();
-    const timeout = setTimeout(() => {
-        abortController.abort(
-            new Error(`Timed out downloading S3 object "${s3Key}".`),
-        );
-    }, 10 * 60 * 1000);
-
-    try {
-        console.log(`Downloading S3 object "${s3Key}"...`);
-        const response = await s3.send(
-            new GetObjectCommand({
-                Bucket: s3Bucket,
-                Key: s3Key,
-            }),
-            { abortSignal: abortController.signal },
-        );
-
-        if (!response.Body) {
-            throw new Error(`S3 object "${s3Key}" did not contain a response body.`);
-        }
-
-        if (!(response.Body instanceof Readable)) {
-            throw new Error(
-                `S3 object "${s3Key}" did not return a Node.js readable stream.`,
-            );
-        }
-
-        await pipeline(response.Body, createWriteStream(downloadPath));
-    } catch (error) {
-        await rm(downloadPath, { force: true });
-        throw error;
-    } finally {
-        clearTimeout(timeout);
+    const metadata = await s3.send(
+        new HeadObjectCommand({
+            Bucket: s3Bucket,
+            Key: s3Key,
+        }),
+    );
+    if (
+        metadata.ContentLength !== undefined &&
+        metadata.ContentLength > MAX_UPLOAD_FILE_SIZE_BYTES
+    ) {
+        throw new Error("Video files must not exceed 300 MB.");
     }
+
+    return getSignedUrl(
+        s3,
+        new GetObjectCommand({
+            Bucket: s3Bucket,
+            Key: s3Key,
+        }),
+        { expiresIn: 7200 },
+    );
 }
 
 function getVideoDurationSeconds(
@@ -433,17 +417,24 @@ function sliceVideo(
         ffmpeg(inputPath)
             .setStartTime(startTime)
             .setDuration(duration)
+            .inputOptions(["-threads", "1"])
             .outputOptions([
                 "-vf",
                 getAspectRatioFilter(aspectRatio),
                 "-c:v",
                 "libx264",
                 "-preset",
-                "veryfast",
+                "ultrafast",
                 "-crf",
                 "23",
                 "-pix_fmt",
                 "yuv420p",
+                "-threads",
+                "1",
+                "-x264-params",
+                "rc-lookahead=5:ref=1:sync-lookahead=0",
+                "-max_muxing_queue_size",
+                "400",
                 "-c:a",
                 "aac",
                 "-b:a",
@@ -497,6 +488,7 @@ async function uploadS3File(
             ContentType: contentType,
         }),
     );
+    await unlink(localPath);
 }
 
 export type VideoProcessingJobData = z.infer<typeof videoProcessingJobSchema>;
@@ -516,7 +508,7 @@ export async function processVideo(
     }
 
     await mkdir(LOCAL_TMP_DIR, { recursive: true });
-    const videoPath = `/tmp/${jobData.videoId}.webm`;
+    const videoPath = await getS3VideoUrl(jobData.s3Key);
     const audioPath = join(LOCAL_TMP_DIR, `${job.id}.mp3`).replace(/\\/g, "/");
 
     const temporaryFilesToCleanup: string[] = [];
@@ -575,12 +567,6 @@ export async function processVideo(
             `Starting job ${job.id} | Mode: ${effectiveJobData.processingMode}`,
         );
 
-        await downloadS3File(jobData.s3Key, videoPath);
-        const sourceFileStats = await stat(videoPath);
-        if (sourceFileStats.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
-            throw new Error("Video files must not exceed 300 MB.");
-        }
-
         const sourceDuration = await probeVideoDuration(videoPath);
         if (sourceDuration > MAX_UPLOAD_DURATION_SECONDS) {
             throw new Error("Videos must not exceed 45 minutes.");
@@ -588,9 +574,8 @@ export async function processVideo(
         await extractAudio(videoPath, audioPath);
 
         console.log(`Sending audio to Groq for transcription...`);
-        const audioBuffer = await readFile(audioPath);
         const formData = new FormData();
-        formData.append("file", audioBuffer, {
+        formData.append("file", createReadStream(audioPath), {
             filename: "audio.mp3",
             contentType: "audio/mpeg",
         });
@@ -627,11 +612,10 @@ export async function processVideo(
             },
         );
 
-        await unlink(audioPath).catch(() => {});
-
         const transcriptData = transcriptResponseSchema.parse(
             groqResponse.data,
         );
+        await unlink(audioPath).catch(() => {});
         const transcript = JSON.stringify(transcriptData.segments);
         if (global.gc) {
             global.gc();
@@ -713,6 +697,15 @@ export async function processVideo(
             ).replace(/\\/g, "/");
 
             temporaryFilesToCleanup.push(rawClipPath, thumbnailPath);
+
+            if (heartbeatTimer) {
+                clearInterval(heartbeatTimer);
+                heartbeatTimer = undefined;
+            }
+            await prisma.$disconnect().catch(() => {});
+            if (global.gc) {
+                global.gc();
+            }
 
             await sliceVideo(
                 videoPath,
@@ -860,7 +853,6 @@ export async function processVideo(
     } finally {
         if (heartbeatTimer) clearInterval(heartbeatTimer);
         await Promise.all([
-            unlink(videoPath).catch(() => {}),
             unlink(audioPath).catch(() => {}),
             ...temporaryFilesToCleanup.map((filePath) =>
                 unlink(filePath).catch(() => {}),
