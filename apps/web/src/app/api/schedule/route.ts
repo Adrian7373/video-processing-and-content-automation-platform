@@ -274,6 +274,24 @@ export async function POST(request: Request) {
                 },
             );
 
+            const workerWakeUrl = (
+                process.env.WORKER_PUBLIC_URL ||
+                "https://scroll-maestro-worker.onrender.com"
+            ).replace(/\/$/, "");
+
+            try {
+                await fetch(`${workerWakeUrl}/health`, {
+                    method: "GET",
+                    headers: {
+                        "User-Agent": "Mozilla/5.0 (compatible; ScrollMaestro-Wake/1.0)",
+                        "Cache-Control": "no-cache",
+                    },
+                    signal: AbortSignal.timeout(3000),
+                });
+            } catch {
+                // Expected to timeout if Render is cold-booting (~40s); the inbound HTTP request alone triggers Render to spin up the container.
+            }
+
             if (job.id) {
                 await prisma.scheduledPost.update({
                     where: { id: createdRecord.id },

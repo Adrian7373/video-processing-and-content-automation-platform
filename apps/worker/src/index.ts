@@ -1,4 +1,7 @@
 import http from "http";
+import { Queue } from "bullmq";
+
+import { queueNames } from "./constants/queues.js";
 
 let isShuttingDown = false;
 let reconcileInterval: NodeJS.Timeout | undefined;
@@ -59,6 +62,11 @@ async function startWorkers(): Promise<void> {
                 import("../../../packages/database/index.js"),
                 import("../../../packages/database/videoLifecycle.js"),
             ]);
+        const activityQueues = [
+            new Queue(queueNames.media, { connection: redis }),
+            new Queue(queueNames.legacyVideo, { connection: redis }),
+            new Queue(queueNames.publishing, { connection: redis }),
+        ];
 
         closeWorkers = async () => {
             await Promise.all([
@@ -68,11 +76,15 @@ async function startWorkers(): Promise<void> {
             ]);
         };
         disconnectServices = async () => {
+            await Promise.all(activityQueues.map((queue) => queue.close()));
             await prisma.$disconnect();
             await redis.quit();
         };
 
-        const workerPublicUrl = process.env.WORKER_PUBLIC_URL;
+        const workerPublicUrl = (
+            process.env.WORKER_PUBLIC_URL ||
+            "https://scroll-maestro-worker.onrender.com"
+        ).replace(/\/$/, "");
 
         reconcileInterval = setInterval(() => {
             void lifecycle
@@ -86,13 +98,38 @@ async function startWorkers(): Promise<void> {
                     console.error("Failed to reconcile stale video jobs.", error);
                 });
 
-            if (workerPublicUrl) {
-                fetch(`${workerPublicUrl.replace(/\/$/, "")}/health`, {
-                    headers: { "User-Agent": "ScrollMaestro-KeepAlive/1.0" },
-                }).catch(() => { });
-            }
+            void Promise.all(
+                activityQueues.map((queue) =>
+                    queue.getJobCounts("active", "waiting", "delayed"),
+                ),
+            )
+                .then((counts) => {
+                    const hasJobs = counts.some(
+                        ({ active, waiting, delayed }) =>
+                            (active ?? 0) > 0 ||
+                            (waiting ?? 0) > 0 ||
+                            (delayed ?? 0) > 0,
+                    );
 
-        }, 5 * 60_000);
+                    if (!hasJobs) {
+                        return;
+                    }
+
+                    return fetch(`${workerPublicUrl}/health`, {
+                        method: "GET",
+                        headers: {
+                            "User-Agent": "ScrollMaestro-KeepAlive/1.0",
+                            "Cache-Control": "no-cache",
+                        },
+                        signal: AbortSignal.timeout(3000),
+                    }).catch(() => {
+                        // The worker is already processing the jobs; a cold-start timeout is harmless.
+                    });
+                })
+                .catch((error: unknown) => {
+                    console.error("Failed to inspect worker queue activity.", error);
+                });
+        }, 4 * 60_000);
         reconcileInterval.unref();
 
         console.log(

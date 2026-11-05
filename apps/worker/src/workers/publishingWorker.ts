@@ -14,8 +14,8 @@ export const publishingWorker = new Worker<SocialPublishingJobData>(
     {
         connection: redis,
         concurrency: 1,
-        drainDelay: 30,
-        stalledInterval: 300000,
+        drainDelay: 15,
+        stalledInterval: 60000,
     },
 );
 
