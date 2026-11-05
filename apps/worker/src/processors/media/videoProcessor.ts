@@ -65,15 +65,15 @@ const transcriptSegmentSchema = z
         start: z.number(),
         end: z.number(),
         text: z.string(),
-        words: z.array(wordTimestampSchema).optional(),
+        words: z.array(wordTimestampSchema).nullable().optional(),
     })
     .passthrough();
 
 const transcriptResponseSchema = z
     .object({
-        segments: z.array(transcriptSegmentSchema),
+        segments: z.array(transcriptSegmentSchema).nullable().optional(),
         language: z.string().optional(),
-        words: z.array(wordTimestampSchema).optional(),
+        words: z.array(wordTimestampSchema).nullable().optional(),
     })
     .passthrough();
 
@@ -105,7 +105,31 @@ function getTranscriptWords(
         return transcriptData.words;
     }
 
-    return transcriptData.segments.flatMap((segment) => segment.words ?? []);
+    return (transcriptData.segments ?? []).flatMap(
+        (segment) => segment.words ?? [],
+    );
+}
+
+function getTranscriptSegments(
+    transcriptData: z.infer<typeof transcriptResponseSchema>,
+    words: z.infer<typeof wordTimestampSchema>[],
+): z.infer<typeof transcriptSegmentSchema>[] {
+    if (transcriptData.segments && transcriptData.segments.length > 0) {
+        return transcriptData.segments;
+    }
+
+    if (words.length === 0) {
+        return [];
+    }
+
+    return [
+        {
+            start: words[0]!.start,
+            end: words[words.length - 1]!.end,
+            text: words.map((word) => word.word).join(" "),
+            words,
+        },
+    ];
 }
 
 let ffmpegExecutablePath: string | undefined;
@@ -628,8 +652,12 @@ export async function processVideo(
             groqResponse.data,
         );
         const transcriptWords = getTranscriptWords(transcriptData);
+        const transcriptSegments = getTranscriptSegments(
+            transcriptData,
+            transcriptWords,
+        );
         await unlink(audioPath).catch(() => {});
-        const transcript = JSON.stringify(transcriptData.segments);
+        const transcript = JSON.stringify(transcriptSegments);
         if (global.gc) {
             global.gc();
         }
@@ -641,7 +669,7 @@ export async function processVideo(
                 "CAPTION_ONLY Mode selected. Bypassing Gemini generation.",
             );
             const lastSegment =
-                transcriptData.segments[transcriptData.segments.length - 1];
+                transcriptSegments[transcriptSegments.length - 1];
             const transcriptFallbackDuration = lastSegment
                 ? lastSegment.end + 1
                 : 60;
