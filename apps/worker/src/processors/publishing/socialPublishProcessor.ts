@@ -76,6 +76,12 @@ interface GoogleRefreshTokenResponse {
     token_type: string;
 }
 
+interface TikTokRefreshTokenResponse {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+}
+
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -185,6 +191,93 @@ async function refreshYouTubeAccessToken(
     return newAccessToken;
 }
 
+async function refreshTikTokAccessToken(
+    account: Pick<
+        SocialAccountRecord,
+        "id" | "refreshToken"
+    > & Partial<Pick<SocialAccountRecord, "accessToken" | "tokenExpiresAt">>,
+): Promise<string> {
+    if (!account.refreshToken) {
+        throw new Error(
+            "TikTok access token has expired and no refreshToken is stored. Please reconnect your TikTok account in /channels.",
+        );
+    }
+
+    const clientKey = env.TIKTOK_CLIENT_KEY;
+    const clientSecret = env.TIKTOK_CLIENT_SECRET;
+    if (!clientKey || !clientSecret) {
+        throw new Error(
+            "TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET must be set in the worker environment to refresh TikTok OAuth tokens.",
+        );
+    }
+
+    console.log(
+        `[OAuth Refresh] Refreshing TikTok access token for SocialAccount ${account.id}...`,
+    );
+
+    const params = new URLSearchParams({
+        client_key: clientKey,
+        client_secret: clientSecret,
+        grant_type: "refresh_token",
+        refresh_token: account.refreshToken,
+    });
+    const response = await axios.post(
+        "https://open.tiktokapis.com/v2/oauth/token/",
+        params,
+        {
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            timeout: 30_000,
+        },
+    );
+
+    const tokenData = z
+        .object({
+            access_token: z.string().min(1),
+            refresh_token: z.string().min(1),
+            expires_in: z.coerce.number().positive(),
+        })
+        .parse(response.data) satisfies TikTokRefreshTokenResponse;
+    const tokenExpiresAt = new Date(
+        Date.now() + tokenData.expires_in * 1000,
+    );
+
+    await prisma.socialAccount.update({
+        where: { id: account.id },
+        data: {
+            accessToken: tokenData.access_token,
+            refreshToken: tokenData.refresh_token,
+            tokenExpiresAt,
+        },
+    });
+
+    account.accessToken = tokenData.access_token;
+    account.refreshToken = tokenData.refresh_token;
+    account.tokenExpiresAt = tokenExpiresAt;
+
+    return tokenData.access_token;
+}
+
+async function ensureValidTikTokAccessToken(
+    account: SocialAccountRecord,
+): Promise<string> {
+    if (isDryRunAccount(account.accessToken)) {
+        return account.accessToken;
+    }
+
+    const expiresInMilliseconds =
+        account.tokenExpiresAt === null
+            ? Number.NEGATIVE_INFINITY
+            : account.tokenExpiresAt.getTime() - Date.now();
+
+    if (expiresInMilliseconds < 5 * 60 * 1000) {
+        return refreshTikTokAccessToken(account);
+    }
+
+    return account.accessToken;
+}
+
 /**
  * Checks whether the SocialAccount's accessToken is expired (or expiring within 5 minutes)
  * and refreshes it before starting the upload.
@@ -194,6 +287,10 @@ async function ensureValidAccessToken(
 ): Promise<string> {
     if (isDryRunAccount(account.accessToken)) {
         return account.accessToken;
+    }
+
+    if (account.platform === "TIKTOK") {
+        return ensureValidTikTokAccessToken(account);
     }
 
     const fiveMinutesFromNow = Date.now() + 5 * 60 * 1000;
@@ -308,16 +405,71 @@ async function publishToTikTok(
             },
         };
 
-    const response = await axios.post<{
-        data?: { publish_id?: string };
-        error?: { code?: string; message?: string };
-    }>(initEndpoint, requestBody, {
-        headers: {
-            Authorization: ["Bearer", ctx.accessToken].join(" "),
-            "Content-Type": "application/json; charset=UTF-8",
-        },
-        timeout: 60_000,
-    });
+    const executePublish = async (accessToken: string) =>
+        axios.post<{
+            data?: { publish_id?: string };
+            error?: { code?: string; message?: string };
+        }>(initEndpoint, requestBody, {
+            headers: {
+                Authorization: ["Bearer", accessToken].join(" "),
+                "Content-Type": "application/json; charset=UTF-8",
+            },
+            timeout: 60_000,
+        });
+
+    let response: Awaited<ReturnType<typeof executePublish>>;
+    let didRefresh = false;
+    try {
+        response = await executePublish(ctx.accessToken);
+    } catch (error) {
+        const errorData = isAxiosError(error)
+            ? (error.response?.data as
+                | { error?: { code?: string } | string }
+                | undefined)
+            : undefined;
+        const errorCode =
+            typeof errorData?.error === "object"
+                ? errorData.error?.code
+                : errorData?.error;
+        const shouldRefresh =
+            isAxiosError(error) &&
+            (error.response?.status === 401 ||
+                errorCode === "access_token_invalid");
+
+        if (!shouldRefresh || !ctx.refreshToken) {
+            throw error;
+        }
+
+        console.warn(
+            "[TikTok Publisher] Received an invalid access token. Refreshing and retrying once...",
+        );
+        const refreshedAccessToken = await refreshTikTokAccessToken({
+            id: ctx.socialAccountId,
+            refreshToken: ctx.refreshToken,
+        });
+        didRefresh = true;
+        response = await executePublish(refreshedAccessToken);
+    }
+
+    const responseErrorCode =
+        typeof response.data?.error === "object"
+            ? response.data.error?.code
+            : undefined;
+    if (
+        !didRefresh &&
+        responseErrorCode === "access_token_invalid" &&
+        ctx.refreshToken
+    ) {
+        console.warn(
+            "[TikTok Publisher] Received an invalid access token response. Refreshing and retrying once...",
+        );
+        const refreshedAccessToken = await refreshTikTokAccessToken({
+            id: ctx.socialAccountId,
+            refreshToken: ctx.refreshToken,
+        });
+        didRefresh = true;
+        response = await executePublish(refreshedAccessToken);
+    }
 
     const publishId = response.data?.data?.publish_id;
     if (!publishId) {

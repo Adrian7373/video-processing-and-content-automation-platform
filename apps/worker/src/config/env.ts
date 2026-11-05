@@ -7,6 +7,8 @@ const envSchema = z.object({
     AWS_REGION: z.string().min(1).optional(),
     FFMPEG_PATH: z.string().min(1).optional(),
     GROQ_API_KEY: z.string().min(1),
+    TIKTOK_CLIENT_KEY: z.string().min(1).optional(),
+    TIKTOK_CLIENT_SECRET: z.string().min(1).optional(),
 });
 
 export const env = envSchema.parse(process.env);
