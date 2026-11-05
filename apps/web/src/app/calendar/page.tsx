@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { prisma } from "../../../../../packages/database/index";
 import { getSignedDownloadUrl } from "@/lib/s3";
+import { getOrCreateActor } from "@/lib/auth";
 import CalendarClient, {
     type CalendarClipItem,
     type CalendarScheduledPostItem,
@@ -10,10 +10,13 @@ import CalendarClient, {
 export const dynamic = "force-dynamic";
 
 export default async function CalendarPage() {
+    const actor = await getOrCreateActor();
+
     const [segments, scheduledPosts, socialAccounts] = await Promise.all([
         prisma.videoSegment.findMany({
             where: {
                 video: {
+                    userId: actor.userId,
                     status: "COMPLETED",
                 },
             },
@@ -32,6 +35,11 @@ export default async function CalendarPage() {
             },
         }),
         prisma.scheduledPost.findMany({
+            where: {
+                socialAccount: {
+                    userId: actor.userId,
+                },
+            },
             include: {
                 videoSegment: {
                     select: {
@@ -54,6 +62,9 @@ export default async function CalendarPage() {
             },
         }),
         prisma.socialAccount.findMany({
+            where: {
+                userId: actor.userId,
+            },
             orderBy: {
                 accountName: "asc",
             },

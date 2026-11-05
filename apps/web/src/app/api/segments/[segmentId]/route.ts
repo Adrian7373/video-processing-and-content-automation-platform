@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "../../../../../../../packages/database/index";
+import { getOrCreateActor } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -35,8 +36,26 @@ export async function PATCH(
     }
 
     try {
+        const actor = await getOrCreateActor();
+        const ownedSegment = await prisma.videoSegment.findFirst({
+            where: {
+                id: segmentId,
+                video: {
+                    userId: actor.userId,
+                },
+            },
+            select: { id: true },
+        });
+
+        if (!ownedSegment) {
+            return NextResponse.json(
+                { error: "Video segment was not found." },
+                { status: 404 },
+            );
+        }
+
         const segment = await prisma.videoSegment.update({
-            where: { id: segmentId },
+            where: { id: ownedSegment.id },
             data: parsed.data,
         });
         return NextResponse.json(segment);

@@ -8,6 +8,7 @@ import {
     PUBLISH_SOCIAL_POST_JOB,
     socialPublishingQueue,
 } from "@/lib/queues";
+import { getOrCreateActor } from "@/lib/auth";
 import type { CalendarScheduledPostItem } from "@/app/calendar/CalendarClient";
 
 export const dynamic = "force-dynamic";
@@ -81,8 +82,11 @@ async function resolveOrCreateAccountId(
         return upserted.id;
     }
 
-    const existing = await prisma.socialAccount.findUnique({
-        where: { id: rawAccountId },
+    const existing = await prisma.socialAccount.findFirst({
+        where: {
+            id: rawAccountId,
+            userId,
+        },
         select: { id: true },
     });
 
@@ -91,12 +95,16 @@ async function resolveOrCreateAccountId(
 
 export async function GET(request: Request) {
     try {
+        const actor = await getOrCreateActor();
         const { searchParams } = new URL(request.url);
         const startParam = searchParams.get("start");
         const endParam = searchParams.get("end");
 
         const scheduledPosts = await prisma.scheduledPost.findMany({
             where: {
+                socialAccount: {
+                    userId: actor.userId,
+                },
                 ...(startParam || endParam
                     ? {
                         scheduledFor: {
@@ -187,8 +195,14 @@ export async function POST(request: Request) {
     const scheduledDate = new Date(scheduledFor);
 
     try {
-        const segment = await prisma.videoSegment.findUnique({
-            where: { id: segmentId },
+        const actor = await getOrCreateActor();
+        const segment = await prisma.videoSegment.findFirst({
+            where: {
+                id: segmentId,
+                video: {
+                    userId: actor.userId,
+                },
+            },
             include: {
                 video: {
                     select: {

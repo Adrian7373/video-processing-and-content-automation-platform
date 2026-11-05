@@ -5,6 +5,7 @@ import {
     PUBLISH_SOCIAL_POST_JOB,
     socialPublishingQueue,
 } from "@/lib/queues";
+import { getOrCreateActor } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -64,8 +65,14 @@ export async function PATCH(request: Request, context: RouteContext) {
     const { scheduledFor, caption } = parsed.data;
 
     try {
-        const existingPost = await prisma.scheduledPost.findUnique({
-            where: { id: postId },
+        const actor = await getOrCreateActor();
+        const existingPost = await prisma.scheduledPost.findFirst({
+            where: {
+                id: postId,
+                socialAccount: {
+                    userId: actor.userId,
+                },
+            },
         });
 
         if (!existingPost) {
@@ -196,8 +203,14 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const { postId } = await Promise.resolve(context.params);
 
     try {
-        const existingPost = await prisma.scheduledPost.findUnique({
-            where: { id: postId },
+        const actor = await getOrCreateActor();
+        const existingPost = await prisma.scheduledPost.findFirst({
+            where: {
+                id: postId,
+                socialAccount: {
+                    userId: actor.userId,
+                },
+            },
             select: {
                 id: true,
                 bullMqJobId: true,
