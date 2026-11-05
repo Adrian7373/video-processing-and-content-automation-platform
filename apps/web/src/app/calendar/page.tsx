@@ -133,6 +133,7 @@ export default async function CalendarPage() {
                 initialClips={serializedClips}
                 initialPosts={serializedPosts}
                 initialAccounts={serializedAccounts}
+                isAnonymous={actor.isAnonymous}
             />
         </main>
     );

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import AuthGateModal from "../components/AuthGateModal";
 import {
     DndContext,
     DragOverlay,
@@ -82,6 +83,7 @@ interface CalendarClientProps {
     initialClips: CalendarClipItem[];
     initialPosts: CalendarScheduledPostItem[];
     initialAccounts: CalendarSocialAccountItem[];
+    isAnonymous: boolean;
 }
 
 const CLIPS_PER_PAGE = 10;
@@ -89,13 +91,6 @@ const CLIPS_PER_PAGE = 10;
 type DragPayload =
     | { type: "CLIP"; clip: CalendarClipItem }
     | { type: "POST"; post: CalendarScheduledPostItem };
-
-const DEFAULT_DEMO_ACCOUNTS: CalendarSocialAccountItem[] = [
-    { id: "demo-yt", platform: "YOUTUBE_SHORTS", accountName: "YouTube Shorts" },
-    { id: "demo-tt", platform: "TIKTOK", accountName: "TikTok Creator" },
-    { id: "demo-ig", platform: "INSTAGRAM_REELS", accountName: "Instagram Reels" },
-    { id: "demo-fb", platform: "FACEBOOK_REELS", accountName: "Facebook Reels" },
-];
 
 const QUICK_TIME_PRESETS = [
     { label: "Morning", time: "09:00", display: "9:00 AM" },
@@ -585,6 +580,7 @@ export default function CalendarClient({
     initialClips,
     initialPosts,
     initialAccounts,
+    isAnonymous,
 }: CalendarClientProps) {
     const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
     const [posts, setPosts] =
@@ -595,7 +591,6 @@ export default function CalendarClient({
     const [platformFilter, setPlatformFilter] = useState<
         SocialPlatformType | "ALL"
     >("ALL");
-    const [tiktokPublishType, setTiktokPublishType] = useState<"DIRECT" | "DRAFT">("DIRECT");
 
     // Active drag state
     const [activeDrag, setActiveDrag] = useState<DragPayload | null>(null);
@@ -615,14 +610,9 @@ export default function CalendarClient({
     // Post Details Modal state
     const [selectedPost, setSelectedPost] =
         useState<CalendarScheduledPostItem | null>(null);
+    const [showAuthModal, setShowAuthModal] = useState(isAnonymous);
 
-    const accounts = useMemo(
-        () =>
-            initialAccounts.length > 0
-                ? initialAccounts
-                : DEFAULT_DEMO_ACCOUNTS,
-        [initialAccounts],
-    );
+    const accounts = initialAccounts;
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -710,6 +700,10 @@ export default function CalendarClient({
     }, [posts, currentMonth]);
 
     const openScheduleModal = (clip: CalendarClipItem, targetDate?: Date) => {
+        if (isAnonymous) {
+            setShowAuthModal(true);
+            return;
+        }
         setModalClip(clip);
         setModalDateString(format(targetDate ?? new Date(), "yyyy-MM-dd"));
         setModalTimeString("18:00");
@@ -810,15 +804,6 @@ export default function CalendarClient({
                     socialAccountIds: selectedAccountIds,
                     caption: modalCaption,
                     scheduledFor: scheduledIso,
-                    tiktokPublishType: selectedAccountIds.some((accountId) =>
-                        accounts.some(
-                            (account) =>
-                                account.id === accountId &&
-                                account.platform === "TIKTOK",
-                        ),
-                    )
-                        ? tiktokPublishType
-                        : "DIRECT",
                 }),
             });
 
@@ -1358,42 +1343,6 @@ export default function CalendarClient({
                                     {formError && <p role="alert" className="mt-1.5 text-xs font-medium text-rose-400">{formError}</p>}
                                 </div>
 
-                                {/* TIKTOK PUBLISH MODE TOGGLE (Only visible if TikTok is selected) */}
-                                {accounts.some((acc) => selectedAccountIds.includes(acc.id) && acc.platform.toUpperCase() === "TIKTOK") && (
-                                    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
-                                        <label className="mb-2 block text-xs font-semibold text-slate-300">
-                                            TikTok Publishing Mode
-                                        </label>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => setTiktokPublishType("DIRECT")}
-                                                className={`flex items-center justify-center rounded-lg border px-3 py-2 text-[11px] font-medium transition ${tiktokPublishType === "DIRECT"
-                                                        ? "border-sky-500 bg-sky-500/10 text-sky-400"
-                                                        : "border-slate-700 bg-slate-950 text-slate-400 hover:border-slate-600 hover:text-slate-200"
-                                                    }`}
-                                            >
-                                                Direct Post
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setTiktokPublishType("DRAFT")}
-                                                className={`flex items-center justify-center rounded-lg border px-3 py-2 text-[11px] font-medium transition ${tiktokPublishType === "DRAFT"
-                                                        ? "border-sky-500 bg-sky-500/10 text-sky-400"
-                                                        : "border-slate-700 bg-slate-950 text-slate-400 hover:border-slate-600 hover:text-slate-200"
-                                                    }`}
-                                            >
-                                                Send to Drafts
-                                            </button>
-                                        </div>
-                                        {tiktokPublishType === "DRAFT" && (
-                                            <p className="mt-2 text-[10px] leading-relaxed text-amber-400/90">
-                                                Note: TikTok allows only 5 pending draft uploads per creator in 24 hours. Captions are disabled for drafts; after uploading, open TikTok <strong>Inbox &rarr; System Notifications</strong> to edit and post.
-                                            </p>
-                                        )}
-                                    </div>
-                                )}
-
                                 {/* Date & Time + Quick Presets */}
                                 <div>
                                     <div className="grid grid-cols-2 gap-3">
@@ -1416,7 +1365,7 @@ export default function CalendarClient({
                                     </div>
                                 </div>
 
-                                {/* Caption (Disabled if DRAFT is selected) */}
+                                {/* Caption */}
                                 <div>
                                     <div className="mb-1.5 flex items-center justify-between">
                                         <label htmlFor="schedule-caption-input" className="text-xs font-semibold text-slate-300">Caption & Hashtags</label>
@@ -1427,7 +1376,6 @@ export default function CalendarClient({
                                         rows={3}
                                         maxLength={2200}
                                         value={modalCaption}
-                                        disabled={tiktokPublishType === "DRAFT"}
                                         onChange={(e) => setModalCaption(e.target.value)}
                                         placeholder="Write a hook and relevant hashtags (#shorts #reels #tiktok)..."
                                         className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs leading-relaxed text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1584,6 +1532,17 @@ export default function CalendarClient({
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showAuthModal && (
+                <AuthGateModal
+                    reasonMessage="Sign in or create an account before scheduling posts. You will also need to connect a social account."
+                    onClose={() => setShowAuthModal(false)}
+                    onSuccess={() => {
+                        setShowAuthModal(false);
+                        window.location.reload();
+                    }}
+                />
             )}
         </DndContext>
     );

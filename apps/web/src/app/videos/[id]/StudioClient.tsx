@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
+import AuthGateModal from "../../components/AuthGateModal";
 
 export type SocialPlatformType =
     | "YOUTUBE_SHORTS"
@@ -56,13 +57,6 @@ interface SocialAccountOption {
     platform: SocialPlatformType;
     accountName: string;
 }
-
-const DEFAULT_DEMO_ACCOUNTS: SocialAccountOption[] = [
-    { id: "demo-yt", platform: "YOUTUBE_SHORTS", accountName: "YouTube Shorts" },
-    { id: "demo-tt", platform: "TIKTOK", accountName: "TikTok Creator" },
-    { id: "demo-ig", platform: "INSTAGRAM_REELS", accountName: "Instagram Reels" },
-    { id: "demo-fb", platform: "FACEBOOK_REELS", accountName: "Facebook Reels" },
-];
 
 const QUICK_TIME_PRESETS = [
     { label: "Morning", time: "09:00", display: "9:00 AM" },
@@ -243,11 +237,8 @@ function formatDurationBadge(secs: number): string {
 
 // Shared multi-channel scheduling hook matching CalendarClient.tsx
 function useScheduler(segment: Segment, onSaved: () => void, onSuccess?: () => void) {
-    const [accounts, setAccounts] = useState<SocialAccountOption[]>(DEFAULT_DEMO_ACCOUNTS);
-    const [hasLiveAccounts, setHasLiveAccounts] = useState(false);
-    const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([
-        DEFAULT_DEMO_ACCOUNTS[0]!.id,
-    ]);
+    const [accounts, setAccounts] = useState<SocialAccountOption[]>([]);
+    const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
     const [caption, setCaption] = useState(
         segment.socialCaption || `${segment.title} #shorts #reels #tiktok`,
     );
@@ -263,7 +254,6 @@ function useScheduler(segment: Segment, onSaved: () => void, onSuccess?: () => v
             .then((data: { accounts?: SocialAccountOption[] } | null) => {
                 if (!mounted || !data?.accounts || data.accounts.length === 0) return;
                 setAccounts(data.accounts);
-                setHasLiveAccounts(true);
                 setSelectedAccountIds([data.accounts[0]!.id]);
             })
             .catch(() => undefined);
@@ -336,7 +326,6 @@ function useScheduler(segment: Segment, onSaved: () => void, onSuccess?: () => v
 
     return {
         accounts,
-        hasLiveAccounts,
         selectedAccountIds,
         toggleAccountSelection,
         caption,
@@ -357,6 +346,8 @@ export default function StudioClient({ videoId }: { videoId: string }) {
     const [captioned, setCaptioned] = useState(true);
     const [tab, setTab] = useState<"insights" | "schedule">("insights");
     const [scheduleOpen, setScheduleOpen] = useState(false);
+    const [isAnonymous, setIsAnonymous] = useState(true);
+    const [showAuthModal, setShowAuthModal] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -381,6 +372,23 @@ export default function StudioClient({ videoId }: { videoId: string }) {
     useEffect(() => {
         void load();
     }, [load]);
+
+    useEffect(() => {
+        fetch("/api/credits", { cache: "no-store" })
+            .then((response) => (response.ok ? response.json() : null))
+            .then((data: { isAnonymous?: boolean } | null) => {
+                if (data) setIsAnonymous(data.isAnonymous ?? true);
+            })
+            .catch(() => setIsAnonymous(true));
+    }, []);
+
+    const openSchedule = () => {
+        if (isAnonymous) {
+            setShowAuthModal(true);
+            return;
+        }
+        setScheduleOpen(true);
+    };
 
     useEffect(() => {
         if (
@@ -549,7 +557,7 @@ export default function StudioClient({ videoId }: { videoId: string }) {
                                     onSelect={() => setActiveId(segment.id)}
                                     onQuickSchedule={() => {
                                         setActiveId(segment.id);
-                                        setScheduleOpen(true);
+                                        openSchedule();
                                     }}
                                 />
                             );
@@ -568,7 +576,7 @@ export default function StudioClient({ videoId }: { videoId: string }) {
                             captioned={captioned}
                             setCaptioned={setCaptioned}
                             aspectRatio={video.aspectRatio}
-                            onSchedule={() => setScheduleOpen(true)}
+                            onSchedule={openSchedule}
                         />
                     )}
                 </section>
@@ -579,7 +587,7 @@ export default function StudioClient({ videoId }: { videoId: string }) {
                     tab={tab}
                     setTab={setTab}
                     onSaved={load}
-                    onOpenModal={() => setScheduleOpen(true)}
+                    onOpenModal={openSchedule}
                 />
             </div>
 
@@ -589,6 +597,17 @@ export default function StudioClient({ videoId }: { videoId: string }) {
                     aspectRatio={video.aspectRatio}
                     onClose={() => setScheduleOpen(false)}
                     onSaved={load}
+                />
+            )}
+
+            {showAuthModal && (
+                <AuthGateModal
+                    reasonMessage="Sign in or create an account before scheduling posts. You will also need to connect a social account."
+                    onClose={() => setShowAuthModal(false)}
+                    onSuccess={() => {
+                        setShowAuthModal(false);
+                        window.location.reload();
+                    }}
                 />
             )}
         </main>
