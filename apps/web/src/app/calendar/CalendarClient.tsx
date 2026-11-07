@@ -1,35 +1,39 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
     DndContext,
     DragOverlay,
+    KeyboardSensor,
+    PointerSensor,
     useDraggable,
     useDroppable,
-    PointerSensor,
-    KeyboardSensor,
     useSensor,
     useSensors,
-    type DragStartEvent,
     type DragEndEvent,
+    type DragStartEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import {
     addMonths,
-    subMonths,
-    startOfMonth,
-    endOfMonth,
-    startOfWeek,
-    endOfWeek,
     eachDayOfInterval,
+    endOfMonth,
+    endOfWeek,
     format,
-    isSameMonth,
     isSameDay,
+    isSameMonth,
     isToday,
     parseISO,
     setHours,
     setMinutes,
+    startOfMonth,
+    startOfWeek,
+    subMonths,
 } from "date-fns";
+import AuthGateModal from "../components/AuthGateModal";
+import PlatformIcon, { PLATFORM_LABEL } from "../components/PlatformIcon";
+import { PLATFORM_COLOR, STATUS_BADGE, badgeBase, ui } from "@/lib/ui";
 
 export type SocialPlatformType =
     | "YOUTUBE_SHORTS"
@@ -82,558 +86,278 @@ interface CalendarClientProps {
     initialClips: CalendarClipItem[];
     initialPosts: CalendarScheduledPostItem[];
     initialAccounts: CalendarSocialAccountItem[];
+    isAnonymous: boolean;
 }
 
 const CLIPS_PER_PAGE = 10;
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const PLATFORMS = Object.keys(PLATFORM_LABEL) as SocialPlatformType[];
 
 type DragPayload =
     | { type: "CLIP"; clip: CalendarClipItem }
     | { type: "POST"; post: CalendarScheduledPostItem };
 
-const DEFAULT_DEMO_ACCOUNTS: CalendarSocialAccountItem[] = [
-    { id: "demo-yt", platform: "YOUTUBE_SHORTS", accountName: "YouTube Shorts" },
-    { id: "demo-tt", platform: "TIKTOK", accountName: "TikTok Creator" },
-    { id: "demo-ig", platform: "INSTAGRAM_REELS", accountName: "Instagram Reels" },
-    { id: "demo-fb", platform: "FACEBOOK_REELS", accountName: "Facebook Reels" },
-];
-
-const QUICK_TIME_PRESETS = [
-    { label: "Morning", time: "09:00", display: "9:00 AM" },
-    { label: "Lunch", time: "12:00", display: "12:00 PM" },
-    { label: "Prime", time: "18:00", display: "6:00 PM" },
-    { label: "Late", time: "21:00", display: "9:00 PM" },
+const QUICK_TIMES = [
+    { time: "09:00", display: "9:00" },
+    { time: "12:00", display: "12:00" },
+    { time: "18:00", display: "18:00" },
+    { time: "21:00", display: "21:00" },
 ] as const;
 
-const PLATFORM_META: Record<
-    SocialPlatformType,
-    {
-        label: string;
-        shortLabel: string;
-        pillSurface: string;
-        accentBar: string;
-        iconColor: string;
-        activeRing: string;
-    }
-> = {
-    YOUTUBE_SHORTS: {
-        label: "YouTube Shorts",
-        shortLabel: "Shorts",
-        pillSurface:
-            "bg-slate-900/95 border-slate-800 hover:border-rose-500/50 text-slate-100",
-        accentBar: "bg-rose-500",
-        iconColor: "text-rose-400",
-        activeRing: "border-rose-500/60 bg-rose-500/10 text-white",
-    },
-    TIKTOK: {
-        label: "TikTok",
-        shortLabel: "TikTok",
-        pillSurface:
-            "bg-slate-900/95 border-slate-800 hover:border-cyan-400/50 text-slate-100",
-        accentBar: "bg-cyan-400",
-        iconColor: "text-cyan-300",
-        activeRing: "border-cyan-400/60 bg-cyan-400/10 text-white",
-    },
-    INSTAGRAM_REELS: {
-        label: "Instagram Reels",
-        shortLabel: "Reels",
-        pillSurface:
-            "bg-slate-900/95 border-slate-800 hover:border-pink-500/50 text-slate-100",
-        accentBar: "bg-pink-500",
-        iconColor: "text-pink-400",
-        activeRing: "border-pink-500/60 bg-pink-500/10 text-white",
-    },
-    FACEBOOK_REELS: {
-        label: "Facebook Reels",
-        shortLabel: "FB Reels",
-        pillSurface:
-            "bg-slate-900/95 border-slate-800 hover:border-blue-500/50 text-slate-100",
-        accentBar: "bg-blue-500",
-        iconColor: "text-blue-400",
-        activeRing: "border-blue-500/60 bg-blue-500/10 text-white",
-    },
+const RATIO_LABEL: Record<CalendarClipItem["aspectRatio"], string> = {
+    VERTICAL_9_16: "9:16",
+    SQUARE_1_1: "1:1",
+    LANDSCAPE_16_9: "16:9",
 };
 
-const STATUS_META: Record<
-    PublishStatusType,
-    { label: string; badgeClass: string; dotClass: string }
-> = {
-    SCHEDULED: {
-        label: "Scheduled",
-        badgeClass: "border-amber-400/30 bg-amber-400/10 text-amber-300",
-        dotClass: "bg-amber-400",
-    },
-    PUBLISHING: {
-        label: "Publishing",
-        badgeClass: "border-sky-400/30 bg-sky-400/10 text-sky-300",
-        dotClass: "bg-sky-400 animate-ping",
-    },
-    PUBLISHED: {
-        label: "Published",
-        badgeClass: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
-        dotClass: "bg-emerald-400",
-    },
-    FAILED: {
-        label: "Failed",
-        badgeClass: "border-rose-500/30 bg-rose-500/10 text-rose-300",
-        dotClass: "bg-rose-500",
-    },
-    CANCELLED: {
-        label: "Cancelled",
-        badgeClass: "border-slate-700 bg-slate-800/60 text-slate-400",
-        dotClass: "bg-slate-500",
-    },
-};
-
-function PlatformIcon({
-    platform,
-    className = "h-3.5 w-3.5",
-}: {
-    platform: SocialPlatformType;
-    className?: string;
-}) {
-    switch (platform) {
-        case "YOUTUBE_SHORTS":
-            return (
-                <svg
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    aria-hidden="true"
-                    className={className}
-                >
-                    <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z" />
-                </svg>
-            );
-        case "TIKTOK":
-            return (
-                <svg
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    aria-hidden="true"
-                    className={className}
-                >
-                    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
-                </svg>
-            );
-        case "INSTAGRAM_REELS":
-            return (
-                <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                    className={className}
-                >
-                    <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
-                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-                    <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
-                </svg>
-            );
-        case "FACEBOOK_REELS":
-            return (
-                <svg
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    aria-hidden="true"
-                    className={className}
-                >
-                    <path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z" />
-                </svg>
-            );
-    }
-}
-
-function formatDurationBadge(seconds: number): string {
+function clipLength(seconds: number): string {
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return mins > 0
-        ? `${mins}:${String(secs).padStart(2, "0")}`
-        : `0:${String(secs).padStart(2, "0")}`;
+    return `${mins}:${String(Math.round(seconds % 60)).padStart(2, "0")}`;
 }
 
-function DraggableClipCard({
-    clip,
-    scheduledCount,
-    onQuickSchedule,
-}: {
-    clip: CalendarClipItem;
-    scheduledCount: number;
-    onQuickSchedule: (clip: CalendarClipItem) => void;
-}) {
-    const { attributes, listeners, setNodeRef, transform, isDragging } =
-        useDraggable({
-            id: `clip-${clip.id}`,
-            data: { type: "CLIP", clip } satisfies DragPayload,
-        });
+/* ------------------------------------------------------------------ */
+/* Pieces                                                              */
+/* ------------------------------------------------------------------ */
 
-    const style: React.CSSProperties = {
-        transform: CSS.Translate.toString(transform),
-    };
-
-    const ratioLabel =
-        clip.aspectRatio === "VERTICAL_9_16"
-            ? "9:16"
-            : clip.aspectRatio === "SQUARE_1_1"
-                ? "1:1"
-                : "16:9";
-
+function ClipThumb({ clip, className }: { clip: CalendarClipItem; className: string }) {
     return (
-        <article
-            ref={setNodeRef}
-            style={style}
-            {...listeners}
-            {...attributes}
-            aria-label={`Draggable clip: ${clip.title}`}
-            className={`group relative flex cursor-grab gap-3.5 rounded-xl border border-slate-800/90 bg-[#0A0D14] p-3 shadow-sm transition-all duration-150 hover:border-slate-700 hover:bg-slate-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 active:cursor-grabbing ${isDragging ? "scale-[0.98] opacity-35" : "opacity-100"
-                }`}
-        >
-            {/* Reserved 9:16 Media Thumbnail Container (Prevents CLS) */}
-            <div className="relative h-24 w-16 shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-[#0A0D14]">
-                {clip.thumbnailUrl ? (
-                    <img
-                        src={clip.thumbnailUrl}
-                        alt={clip.title}
-                        loading="lazy"
-                        className="h-full w-full object-cover"
-                    />
-                ) : (
-                    <div className="flex h-full w-full flex-col items-center justify-center bg-[#0A0D14] from-slate-900 to-slate-950 p-1.5 text-center">
-                        <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            aria-hidden="true"
-                            className="h-5 w-5 text-slate-600 transition-colors group-hover:text-sky-400"
-                        >
-                            <polygon points="5 3 19 12 5 21 5 3" />
-                        </svg>
-                    </div>
-                )}
-
-                {/* Duration Overlay */}
-                <span className="absolute bottom-1 right-1 rounded bg-slate-950/90 px-1 py-0.5 font-mono text-[10px] font-medium text-slate-200">
-                    {formatDurationBadge(clip.durationSeconds)}
-                </span>
-            </div>
-
-            {/* Card Content */}
-            <div className="flex min-w-0 flex-1 flex-col justify-between">
-                <div>
-                    <div className="flex items-center justify-between gap-1.5">
-                        <span className="truncate rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
-                            {clip.thumbnailText || "HIGHLIGHT"}
-                        </span>
-
-                        {/* Subtle Drag Grip Indicator */}
-                        <svg
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            aria-hidden="true"
-                            className="h-3.5 w-3.5 shrink-0 text-slate-600 transition-colors group-hover:text-slate-400"
-                        >
-                            <circle cx="9" cy="6" r="1.5" />
-                            <circle cx="15" cy="6" r="1.5" />
-                            <circle cx="9" cy="12" r="1.5" />
-                            <circle cx="15" cy="12" r="1.5" />
-                            <circle cx="9" cy="18" r="1.5" />
-                            <circle cx="15" cy="18" r="1.5" />
-                        </svg>
-                    </div>
-
-                    <h3 className="mt-1.5 line-clamp-1 text-sm font-semibold leading-snug text-slate-100">
-                        {clip.title}
-                    </h3>
-                    <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">
-                        {clip.parentVideoTitle}
-                    </p>
-                </div>
-
-                {/* Metadata & Action Row */}
-                <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-800/80 pt-2">
-                    <div className="flex flex-wrap items-center gap-1 text-[11px]">
-                        <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-slate-300">
-                            {ratioLabel}
-                        </span>
-                        {clip.hasBurnedCaptions && (
-                            <span
-                                title="Burned-in subtitles included"
-                                className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-300"
-                            >
-                                CC
-                            </span>
-                        )}
-                        {scheduledCount > 0 && (
-                            <span className="rounded bg-amber-400/10 px-1.5 py-0.5 font-medium text-amber-300">
-                                {scheduledCount}× queued
-                            </span>
-                        )}
-                    </div>
-
-                    <button
-                        type="button"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={() => onQuickSchedule(clip)}
-                        aria-label={`Schedule ${clip.title}`}
-                        className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/90 px-2.5 py-1 text-xs font-medium text-slate-100 transition hover:border-sky-400/60 hover:bg-sky-500 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-                    >
-                        <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.2"
-                            aria-hidden="true"
-                            className="h-3 w-3"
-                        >
-                            <line x1="12" y1="5" x2="12" y2="19" />
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
-                        Schedule
-                    </button>
-                </div>
-            </div>
-        </article>
-    );
-}
-
-function DraggableScheduledPostPill({
-    post,
-    onSelectPost,
-}: {
-    post: CalendarScheduledPostItem;
-    onSelectPost: (post: CalendarScheduledPostItem) => void;
-}) {
-    const { attributes, listeners, setNodeRef, transform, isDragging } =
-        useDraggable({
-            id: `post-${post.id}`,
-            data: { type: "POST", post } satisfies DragPayload,
-        });
-
-    const style: React.CSSProperties = {
-        transform: CSS.Translate.toString(transform),
-    };
-
-    const platformMeta = PLATFORM_META[post.platform];
-    const statusMeta = STATUS_META[post.status];
-    const timeFormatted = format(parseISO(post.scheduledFor), "h:mm a");
-
-    return (
-        <div
-            ref={setNodeRef}
-            style={style}
-            {...listeners}
-            {...attributes}
-            role="button"
-            tabIndex={0}
-            aria-label={`${platformMeta.label} post: ${post.segmentTitle} scheduled at ${timeFormatted}`}
-            onClick={(e) => {
-                e.stopPropagation();
-                onSelectPost(post);
-            }}
-            onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onSelectPost(post);
-                }
-            }}
-            className={`group relative flex cursor-grab items-center justify-between gap-2 overflow-hidden rounded-lg border py-1.5 pl-2.5 pr-2 text-xs shadow-sm transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 active:cursor-grabbing ${platformMeta.pillSurface
-                } ${isDragging ? "scale-95 opacity-30" : "opacity-100"}`}
-        >
-            {/* Left Platform Accent Bar */}
-            <span
-                aria-hidden="true"
-                className={`absolute inset-y-0 left-0 w-1 ${platformMeta.accentBar}`}
-            />
-
-            <div className="flex min-w-0 items-center gap-1.5">
-                <span className={`shrink-0 ${platformMeta.iconColor}`}>
-                    <PlatformIcon
-                        platform={post.platform}
-                        className="h-3.5 w-3.5"
-                    />
-                </span>
-                <span className="truncate font-medium text-slate-100">
-                    {post.segmentTitle}
-                </span>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-1.5">
-                <span className="font-mono text-[10px] text-slate-400">
-                    {timeFormatted}
-                </span>
-                <span
-                    title={`Status: ${statusMeta.label}`}
-                    className={`h-1.5 w-1.5 rounded-full ${statusMeta.dotClass}`}
-                />
-            </div>
-        </div>
-    );
-}
-
-function DroppableCalendarDayCell({
-    day,
-    isCurrentMonth,
-    posts,
-    onAddClick,
-    onSelectPost,
-}: {
-    day: Date;
-    isCurrentMonth: boolean;
-    posts: CalendarScheduledPostItem[];
-    onAddClick: (day: Date) => void;
-    onSelectPost: (post: CalendarScheduledPostItem) => void;
-}) {
-    const dayKey = format(day, "yyyy-MM-dd");
-    const { isOver, setNodeRef } = useDroppable({
-        id: `day-${dayKey}`,
-        data: { dayKey, date: day },
-    });
-
-    const today = isToday(day);
-
-    return (
-        <div
-            ref={setNodeRef}
-            className={`group relative flex min-h-[148px] flex-col justify-between border-b border-r border-slate-800/80 p-2.5 transition-colors duration-150 ${isCurrentMonth
-                ? "bg-[#0A0D14]"
-                : "bg-[#0A0D14]"
-                } ${isOver
-                    ? "bg-sky-500/10 ring-2 ring-inset ring-sky-400"
-                    : today
-                        ? "bg-slate-900/40"
-                        : ""
-                }`}
-        >
-            <div>
-                {/* Day Header */}
-                <div className="mb-2 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                        <span
-                            className={`inline-flex h-7 w-7 items-center justify-center rounded-lg text-xs font-semibold transition-colors ${today
-                                ? "bg-sky-400 font-bold text-slate-950 shadow-sm shadow-sky-400/30"
-                                : isCurrentMonth
-                                    ? "text-slate-200"
-                                    : "text-slate-600"
-                                }`}
-                        >
-                            {format(day, "d")}
-                        </span>
-                        {today && (
-                            <span className="rounded bg-sky-400/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
-                                Today
-                            </span>
-                        )}
-                    </div>
-
-                    {/* Accessible Add Button (Always Keyboard-Focusable, Visible on Subtle Contrast) */}
-                    <button
-                        type="button"
-                        onClick={() => onAddClick(day)}
-                        aria-label={`Schedule clip on ${format(day, "MMMM d, yyyy")}`}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-slate-500 transition hover:border-slate-700 hover:bg-slate-800 hover:text-slate-100 focus-visible:border-sky-400 focus-visible:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-                    >
-                        <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            aria-hidden="true"
-                            className="h-3.5 w-3.5"
-                        >
-                            <line x1="12" y1="5" x2="12" y2="19" />
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
-                    </button>
-                </div>
-
-                {/* Scheduled Posts List */}
-                <div className="space-y-1.5">
-                    {posts.map((post) => (
-                        <DraggableScheduledPostPill
-                            key={post.id}
-                            post={post}
-                            onSelectPost={onSelectPost}
-                        />
-                    ))}
-                </div>
-            </div>
-
-            {/* Active Drop Zone Feedback */}
-            {isOver && (
-                <div className="mt-2 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-sky-400/70 bg-sky-500/10 py-1.5 text-[11px] font-semibold text-sky-300">
-                    <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        aria-hidden="true"
-                        className="h-3.5 w-3.5"
-                    >
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
+        <div className={`relative shrink-0 overflow-hidden rounded-md bg-frame ${className}`}>
+            {clip.thumbnailUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={clip.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+            ) : (
+                <div className="grid h-full w-full place-items-center text-white/60">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="h-4 w-4">
+                        <path d="M7 4.5v15l12-7.5z" />
                     </svg>
-                    Drop to Schedule
                 </div>
             )}
         </div>
     );
 }
 
+function LibraryClip({
+    clip,
+    scheduledCount,
+    onSchedule,
+}: {
+    clip: CalendarClipItem;
+    scheduledCount: number;
+    onSchedule: (clip: CalendarClipItem) => void;
+}) {
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+        id: `clip-${clip.id}`,
+        data: { type: "CLIP", clip } satisfies DragPayload,
+    });
+
+    return (
+        <li
+            ref={setNodeRef}
+            style={{ transform: CSS.Translate.toString(transform) }}
+            className={`group flex gap-3 rounded-lg p-2 transition hover:bg-surface ${isDragging ? "opacity-40" : ""}`}
+        >
+            <div
+                {...listeners}
+                {...attributes}
+                aria-label={`Drag ${clip.title} onto a day`}
+                className={`flex min-w-0 flex-1 cursor-grab gap-3 rounded-md active:cursor-grabbing ${ui.focusRing}`}
+            >
+                <ClipThumb clip={clip} className="h-[72px] w-[41px]" />
+                <div className="min-w-0 flex-1 py-0.5">
+                    <p className="line-clamp-2 text-sm font-semibold leading-snug text-ink">{clip.title}</p>
+                    <p className="mt-1 truncate text-[13px] text-muted">
+                        <span className="tabular-nums">{clipLength(clip.durationSeconds)}</span>, {RATIO_LABEL[clip.aspectRatio]}
+                        {clip.hasBurnedCaptions ? ", captions" : ""}
+                    </p>
+                    {scheduledCount > 0 && (
+                        <p className="mt-0.5 text-[13px] text-info">Scheduled {scheduledCount}×</p>
+                    )}
+                </div>
+            </div>
+            <button
+                type="button"
+                onClick={() => onSchedule(clip)}
+                aria-label={`Schedule ${clip.title}`}
+                title="Schedule"
+                className={`${ui.btnIcon} self-center group-hover:text-ink`}
+            >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="h-[18px] w-[18px]">
+                    <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+                    <path d="M3.5 9.5h17M8 3v4M16 3v4M12 12.5v5M9.5 15h5" />
+                </svg>
+            </button>
+        </li>
+    );
+}
+
+function PostChip({
+    post,
+    onSelect,
+}: {
+    post: CalendarScheduledPostItem;
+    onSelect: (post: CalendarScheduledPostItem) => void;
+}) {
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+        id: `post-${post.id}`,
+        data: { type: "POST", post } satisfies DragPayload,
+    });
+    const time = format(parseISO(post.scheduledFor), "HH:mm");
+    const failed = post.status === "FAILED";
+    const published = post.status === "PUBLISHED";
+
+    return (
+        <div
+            ref={setNodeRef}
+            style={{ transform: CSS.Translate.toString(transform) }}
+            {...listeners}
+            {...attributes}
+            role="button"
+            tabIndex={0}
+            aria-label={`${PLATFORM_LABEL[post.platform].label}: ${post.segmentTitle} at ${time}, ${STATUS_BADGE[post.status].label}`}
+            onClick={(event) => {
+                event.stopPropagation();
+                onSelect(post);
+            }}
+            onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelect(post);
+                }
+            }}
+            className={`flex h-7 cursor-grab items-center gap-1.5 rounded-md border px-1.5 text-[13px] transition active:cursor-grabbing ${ui.focusRing} ${failed
+                ? "border-danger/40 bg-danger/10"
+                : published
+                    ? "border-transparent bg-success/10"
+                    : "border-line bg-raised hover:border-line-strong"
+                } ${isDragging ? "opacity-30" : ""}`}
+        >
+            <PlatformIcon platform={post.platform} className={`h-3.5 w-3.5 shrink-0 ${PLATFORM_COLOR[post.platform]}`} />
+            <span className={`shrink-0 tabular-nums ${failed ? "text-danger" : "text-muted"}`}>{time}</span>
+            <span className={`truncate font-medium ${published ? "text-muted" : "text-ink"}`}>
+                {post.segmentTitle}
+            </span>
+        </div>
+    );
+}
+
+function DayCell({
+    day,
+    inMonth,
+    posts,
+    canAdd,
+    onAdd,
+    onSelectPost,
+}: {
+    day: Date;
+    inMonth: boolean;
+    posts: CalendarScheduledPostItem[];
+    canAdd: boolean;
+    onAdd: (day: Date) => void;
+    onSelectPost: (post: CalendarScheduledPostItem) => void;
+}) {
+    const key = format(day, "yyyy-MM-dd");
+    const { isOver, setNodeRef } = useDroppable({ id: `day-${key}`, data: { dayKey: key, date: day } });
+    const today = isToday(day);
+    const visible = posts.slice(0, 3);
+    const hidden = posts.length - visible.length;
+
+    return (
+        <div
+            ref={setNodeRef}
+            className={`group relative flex min-h-[124px] flex-col gap-1 border-b border-r border-line p-1.5 transition-colors ${isOver
+                ? "bg-action/12 shadow-[inset_0_0_0_2px_var(--sm-action)]"
+                : inMonth
+                    ? "bg-page"
+                    : "bg-surface/60"
+                }`}
+        >
+            <div className="flex items-center justify-between">
+                <span
+                    className={`inline-grid h-7 min-w-7 place-items-center rounded-full px-1 text-[13px] tabular-nums ${today
+                        ? "bg-action font-semibold text-action-ink"
+                        : inMonth
+                            ? "font-medium text-ink"
+                            : "text-muted"
+                        }`}
+                >
+                    {format(day, "d")}
+                </span>
+                {canAdd && (
+                    <button
+                        type="button"
+                        onClick={() => onAdd(day)}
+                        aria-label={`Schedule a clip on ${format(day, "MMMM d")}`}
+                        className={`${ui.btnIcon} h-7 w-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100`}
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="h-3.5 w-3.5">
+                            <path d="M12 5v14M5 12h14" />
+                        </svg>
+                    </button>
+                )}
+            </div>
+            <div className="flex min-w-0 flex-col gap-1">
+                {visible.map((post) => (
+                    <PostChip key={post.id} post={post} onSelect={onSelectPost} />
+                ))}
+                {hidden > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => onSelectPost(posts[3]!)}
+                        className="h-6 rounded-md px-1.5 text-left text-[13px] font-medium text-muted hover:bg-surface hover:text-ink"
+                    >
+                        {hidden} more
+                    </button>
+                )}
+            </div>
+            {isOver && (
+                <span className="pointer-events-none mt-auto rounded-md border border-dashed border-action px-1.5 py-1 text-center text-[13px] font-medium text-ink">
+                    Drop to schedule
+                </span>
+            )}
+        </div>
+    );
+}
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
+
 export default function CalendarClient({
     initialClips,
     initialPosts,
     initialAccounts,
+    isAnonymous,
 }: CalendarClientProps) {
     const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
-    const [posts, setPosts] =
-        useState<CalendarScheduledPostItem[]>(initialPosts);
+    const [posts, setPosts] = useState<CalendarScheduledPostItem[]>(initialPosts);
     const [searchQuery, setSearchQuery] = useState("");
     const [clipPage, setClipPage] = useState(1);
     const [onlyUnscheduled, setOnlyUnscheduled] = useState(false);
-    const [platformFilter, setPlatformFilter] = useState<
-        SocialPlatformType | "ALL"
-    >("ALL");
-    const [tiktokPublishType, setTiktokPublishType] = useState<"DIRECT" | "DRAFT">("DIRECT");
-
-    // Active drag state
+    const [platformFilter, setPlatformFilter] = useState<SocialPlatformType | "ALL">("ALL");
     const [activeDrag, setActiveDrag] = useState<DragPayload | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
 
-    // Schedule Modal state
+    // Schedule modal
     const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
     const [modalClip, setModalClip] = useState<CalendarClipItem | null>(null);
-    const [modalDateString, setModalDateString] = useState<string>(() =>
-        format(new Date(), "yyyy-MM-dd"),
-    );
+    const [modalDateString, setModalDateString] = useState<string>(() => format(new Date(), "yyyy-MM-dd"));
     const [modalTimeString, setModalTimeString] = useState<string>("18:00");
     const [modalCaption, setModalCaption] = useState<string>("");
     const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
     const [formError, setFormError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Post Details Modal state
-    const [selectedPost, setSelectedPost] =
-        useState<CalendarScheduledPostItem | null>(null);
+    // Post details modal
+    const [selectedPost, setSelectedPost] = useState<CalendarScheduledPostItem | null>(null);
+    const [showAuthModal, setShowAuthModal] = useState(isAnonymous);
 
-    const accounts = useMemo(
-        () =>
-            initialAccounts.length > 0
-                ? initialAccounts
-                : DEFAULT_DEMO_ACCOUNTS,
-        [initialAccounts],
-    );
+    const accounts = initialAccounts;
 
     const sensors = useSensors(
-        useSensor(PointerSensor, {
-            activationConstraint: {
-                distance: 6,
-            },
-        }),
+        useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
         useSensor(KeyboardSensor),
     );
 
-    // Close modals on Escape key for keyboard accessibility
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === "Escape") {
@@ -647,75 +371,77 @@ export default function CalendarClient({
 
     const calendarDays = useMemo(() => {
         const monthStart = startOfMonth(currentMonth);
-        const monthEnd = endOfMonth(monthStart);
-        const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
-        const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
-
-        return eachDayOfInterval({ start: gridStart, end: gridEnd });
+        return eachDayOfInterval({
+            start: startOfWeek(monthStart, { weekStartsOn: 0 }),
+            end: endOfWeek(endOfMonth(monthStart), { weekStartsOn: 0 }),
+        });
     }, [currentMonth]);
 
     const scheduledCountByClipId = useMemo(() => {
         const map = new Map<string, number>();
         for (const post of posts) {
             if (post.status !== "CANCELLED") {
-                map.set(
-                    post.videoSegmentId,
-                    (map.get(post.videoSegmentId) ?? 0) + 1,
-                );
+                map.set(post.videoSegmentId, (map.get(post.videoSegmentId) ?? 0) + 1);
             }
         }
         return map;
     }, [posts]);
 
     const filteredClips = useMemo(() => {
+        const q = searchQuery.toLowerCase();
         return initialClips.filter((clip) => {
-            const matchesSearch =
-                clip.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                clip.parentVideoTitle
-                    .toLowerCase()
-                    .includes(searchQuery.toLowerCase());
-            if (!matchesSearch) return false;
-
-            if (onlyUnscheduled) {
-                return (scheduledCountByClipId.get(clip.id) ?? 0) === 0;
-            }
-            return true;
+            const matches = clip.title.toLowerCase().includes(q) || clip.parentVideoTitle.toLowerCase().includes(q);
+            if (!matches) return false;
+            return onlyUnscheduled ? (scheduledCountByClipId.get(clip.id) ?? 0) === 0 : true;
         });
     }, [initialClips, searchQuery, onlyUnscheduled, scheduledCountByClipId]);
 
-    const totalClipPages = Math.max(
-        1,
-        Math.ceil(filteredClips.length / CLIPS_PER_PAGE),
-    );
+    const totalClipPages = Math.max(1, Math.ceil(filteredClips.length / CLIPS_PER_PAGE));
     const validClipPage = Math.min(clipPage, totalClipPages);
-    const paginatedClips = filteredClips.slice(
-        (validClipPage - 1) * CLIPS_PER_PAGE,
-        validClipPage * CLIPS_PER_PAGE,
+    const paginatedClips = filteredClips.slice((validClipPage - 1) * CLIPS_PER_PAGE, validClipPage * CLIPS_PER_PAGE);
+
+    const visiblePosts = useMemo(
+        () => posts.filter((p) => p.status !== "CANCELLED" && (platformFilter === "ALL" || p.platform === platformFilter)),
+        [posts, platformFilter],
     );
 
-    // Monthly KPI Summary
+    const postsByDay = useMemo(() => {
+        const map = new Map<string, CalendarScheduledPostItem[]>();
+        for (const post of visiblePosts) {
+            const key = format(parseISO(post.scheduledFor), "yyyy-MM-dd");
+            map.set(key, [...(map.get(key) ?? []), post]);
+        }
+        for (const list of map.values()) list.sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
+        return map;
+    }, [visiblePosts]);
+
     const monthMetrics = useMemo(() => {
-        const activeMonthPosts = posts.filter(
-            (p) =>
-                p.status !== "CANCELLED" &&
-                isSameMonth(parseISO(p.scheduledFor), currentMonth),
-        );
+        const inMonth = posts.filter((p) => p.status !== "CANCELLED" && isSameMonth(parseISO(p.scheduledFor), currentMonth));
         return {
-            total: activeMonthPosts.length,
-            scheduled: activeMonthPosts.filter((p) => p.status === "SCHEDULED")
-                .length,
-            published: activeMonthPosts.filter((p) => p.status === "PUBLISHED")
-                .length,
+            scheduled: inMonth.filter((p) => p.status === "SCHEDULED" || p.status === "PUBLISHING").length,
+            published: inMonth.filter((p) => p.status === "PUBLISHED").length,
+            failed: inMonth.filter((p) => p.status === "FAILED").length,
         };
     }, [posts, currentMonth]);
 
+    const monthAgenda = useMemo(
+        () =>
+            calendarDays
+                .filter((day) => isSameMonth(day, currentMonth))
+                .map((day) => ({ day, posts: postsByDay.get(format(day, "yyyy-MM-dd")) ?? [] }))
+                .filter((entry) => entry.posts.length > 0),
+        [calendarDays, currentMonth, postsByDay],
+    );
+
     const openScheduleModal = (clip: CalendarClipItem, targetDate?: Date) => {
+        if (isAnonymous) {
+            setShowAuthModal(true);
+            return;
+        }
         setModalClip(clip);
         setModalDateString(format(targetDate ?? new Date(), "yyyy-MM-dd"));
         setModalTimeString("18:00");
-        setModalCaption(
-            clip.socialCaption || `${clip.title} #shorts #reels #tiktok`,
-        );
+        setModalCaption(clip.socialCaption || `${clip.title} #shorts #reels #tiktok`);
         setSelectedAccountIds(accounts[0] ? [accounts[0].id] : []);
         setFormError(null);
         setIsScheduleModalOpen(true);
@@ -723,20 +449,14 @@ export default function CalendarClient({
 
     const handleDragStart = (event: DragStartEvent) => {
         const payload = event.active.data.current as DragPayload | undefined;
-        if (payload) {
-            setActiveDrag(payload);
-        }
+        if (payload) setActiveDrag(payload);
     };
 
     const handleDragEnd = async (event: DragEndEvent) => {
         const payload = event.active.data.current as DragPayload | undefined;
         setActiveDrag(null);
-
         if (!payload || !event.over) return;
-
-        const overId = String(event.over.id);
-        if (!overId.startsWith("day-")) return;
-
+        if (!String(event.over.id).startsWith("day-")) return;
         const targetDate = event.over.data.current?.date as Date | undefined;
         if (!targetDate) return;
 
@@ -745,62 +465,46 @@ export default function CalendarClient({
             return;
         }
 
-        if (payload.type === "POST") {
-            const existingDate = parseISO(payload.post.scheduledFor);
-            if (isSameDay(existingDate, targetDate)) return;
+        const previous = payload.post.scheduledFor;
+        const existingDate = parseISO(previous);
+        if (isSameDay(existingDate, targetDate)) return;
+        const newIso = setMinutes(setHours(targetDate, existingDate.getHours()), existingDate.getMinutes()).toISOString();
 
-            const updatedDate = setMinutes(
-                setHours(targetDate, existingDate.getHours()),
-                existingDate.getMinutes(),
-            );
-            const newIso = updatedDate.toISOString();
-
-            setPosts((prev) =>
-                prev.map((item) =>
-                    item.id === payload.post.id
-                        ? { ...item, scheduledFor: newIso }
-                        : item,
-                ),
-            );
-
-            try {
-                await fetch(`/api/schedule/${payload.post.id}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ scheduledFor: newIso }),
-                });
-            } catch {
-                // Keep optimistic UI state
-            }
+        setPosts((prev) => prev.map((item) => (item.id === payload.post.id ? { ...item, scheduledFor: newIso } : item)));
+        try {
+            const response = await fetch(`/api/schedule/${payload.post.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ scheduledFor: newIso }),
+            });
+            if (!response.ok) throw new Error();
+            setNotice(`Moved to ${format(parseISO(newIso), "EEEE d MMMM")}.`);
+        } catch {
+            setPosts((prev) => prev.map((item) => (item.id === payload.post.id ? { ...item, scheduledFor: previous } : item)));
+            setNotice("The post could not be moved. It is back on its original day.");
         }
     };
 
     const toggleAccountSelection = (accountId: string) => {
         setFormError(null);
-        setSelectedAccountIds((prev) =>
-            prev.includes(accountId)
-                ? prev.filter((id) => id !== accountId)
-                : [...prev, accountId],
-        );
+        setSelectedAccountIds((prev) => (prev.includes(accountId) ? prev.filter((id) => id !== accountId) : [...prev, accountId]));
     };
 
     const handleScheduleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!modalClip) return;
-
         if (selectedAccountIds.length === 0) {
-            setFormError("Select at least one target platform to schedule.");
+            setFormError("Choose at least one account to post to.");
+            return;
+        }
+        const scheduled = new Date(`${modalDateString}T${modalTimeString}:00`);
+        if (Number.isNaN(scheduled.getTime())) {
+            setFormError("Choose a valid date and time.");
             return;
         }
 
         setIsSubmitting(true);
         setFormError(null);
-
-        const scheduledDateTime = new Date(
-            `${modalDateString}T${modalTimeString}:00`,
-        );
-        const scheduledIso = scheduledDateTime.toISOString();
-
         try {
             const response = await fetch("/api/schedule", {
                 method: "POST",
@@ -809,123 +513,62 @@ export default function CalendarClient({
                     segmentId: modalClip.id,
                     socialAccountIds: selectedAccountIds,
                     caption: modalCaption,
-                    scheduledFor: scheduledIso,
-                    tiktokPublishType: selectedAccountIds.some((accountId) =>
-                        accounts.some(
-                            (account) =>
-                                account.id === accountId &&
-                                account.platform === "TIKTOK",
-                        ),
-                    )
-                        ? tiktokPublishType
-                        : "DIRECT",
+                    scheduledFor: scheduled.toISOString(),
                 }),
             });
-
-            if (response.ok) {
-                const data = (await response.json()) as {
-                    posts?: CalendarScheduledPostItem[];
-                };
-                if (data.posts && Array.isArray(data.posts)) {
-                    setPosts((prev) => [...prev, ...data.posts!]);
-                    setIsScheduleModalOpen(false);
-                    return;
-                }
+            const data = (await response.json().catch(() => ({}))) as { posts?: CalendarScheduledPostItem[]; error?: string };
+            if (!response.ok || !Array.isArray(data.posts)) {
+                throw new Error(data.error ?? "The clip could not be scheduled. Try again.");
             }
-        } catch {
-            // Fallback to optimistic local state below
+            setPosts((prev) => [...prev, ...data.posts!]);
+            setIsScheduleModalOpen(false);
+            setNotice(`Scheduled for ${format(scheduled, "EEEE d MMMM 'at' HH:mm")}.`);
+        } catch (error) {
+            setFormError(error instanceof Error ? error.message : "The clip could not be scheduled. Try again.");
         } finally {
             setIsSubmitting(false);
         }
-
-        const optimisticNewPosts: CalendarScheduledPostItem[] =
-            selectedAccountIds.map((accId) => {
-                const account =
-                    accounts.find((a) => a.id === accId) ?? accounts[0]!;
-                return {
-                    id: `local-${Date.now()}-${accId}`,
-                    videoSegmentId: modalClip.id,
-                    segmentTitle: modalClip.title,
-                    thumbnailText: modalClip.thumbnailText,
-                    socialAccountId: account.id,
-                    platform: account.platform,
-                    accountName: account.accountName,
-                    caption: modalCaption,
-                    scheduledFor: scheduledIso,
-                    status: "SCHEDULED",
-                    publishedUrl: null,
-                };
-            });
-
-        setPosts((prev) => [...prev, ...optimisticNewPosts]);
-        setIsScheduleModalOpen(false);
     };
 
-    const handleCancelScheduledPost = async (postId: string) => {
-        setPosts((prev) => prev.filter((p) => p.id !== postId));
+    const handleCancelScheduledPost = async (post: CalendarScheduledPostItem) => {
+        setPosts((prev) => prev.filter((p) => p.id !== post.id));
         setSelectedPost(null);
-
         try {
-            await fetch(`/api/schedule/${postId}`, {
-                method: "DELETE",
-            });
+            const response = await fetch(`/api/schedule/${post.id}`, { method: "DELETE" });
+            if (!response.ok) throw new Error();
+            setNotice("Removed from the schedule.");
         } catch {
-            // Ignore when testing visually
+            setPosts((prev) => [...prev, post]);
+            setNotice("The post could not be removed. Try again.");
         }
     };
 
+    const firstClip = filteredClips[0] ?? initialClips[0];
+    const summary = [
+        `${monthMetrics.scheduled} scheduled`,
+        `${monthMetrics.published} published`,
+        ...(monthMetrics.failed > 0 ? [`${monthMetrics.failed} failed`] : []),
+    ].join(", ");
+
     return (
-        <DndContext
-            sensors={sensors}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-        >
-            <div className=" grid max-w-[1600px] grid-cols-1 bg-[#0A0D14] text-slate-100 lg:grid-cols-[380px_1fr]">
-                {/* LEFT SIDEBAR: Ready Clips Backlog */}
+        <DndContext id="calendar-dnd" sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            <div className="flex flex-col bg-page text-ink lg:h-[calc(100vh-4rem)] lg:flex-row">
+                {/* Clip library */}
                 <aside
-                    aria-label="Unscheduled Clips Library"
-                    className="flex h-[calc(100vh-73px)] flex-col border-r border-slate-800/90 bg-[#0A0D14]"
+                    aria-label="Clip library"
+                    className="flex max-h-[420px] flex-col border-b border-line lg:max-h-none lg:w-[300px] lg:shrink-0 lg:border-b-0 lg:border-r"
                 >
-                    <div className="border-b border-slate-800/90 p-4">
-                        <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                                <h2 className="text-sm font-semibold tracking-tight text-slate-100">
-                                    Clip Library
-                                </h2>
-                                <span
-                                    aria-live="polite"
-                                    className="rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 font-mono text-xs font-medium text-slate-300"
-                                >
-                                    {filteredClips.length}
-                                </span>
-                            </div>
-
-                            <label className="inline-flex cursor-pointer select-none items-center gap-2 text-xs font-medium text-slate-300 hover:text-white">
-                                <input
-                                    type="checkbox"
-                                    checked={onlyUnscheduled}
-                                    onChange={(e) => {
-                                        setOnlyUnscheduled(e.target.checked);
-                                        setClipPage(1);
-                                    }}
-                                    className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-400 focus:ring-2 focus:ring-sky-400 focus:ring-offset-0"
-                                />
-                                Unscheduled only
-                            </label>
+                    <div className="space-y-3 border-b border-line p-4">
+                        <div className="flex items-baseline justify-between gap-2">
+                            <h2 className="font-display text-lg font-medium tracking-[-0.015em]">Clips</h2>
+                            <span className="text-[13px] text-muted" aria-live="polite">
+                                {filteredClips.length} {filteredClips.length === 1 ? "clip" : "clips"}
+                            </span>
                         </div>
-
-                        {/* Search Field with SVG Icon */}
-                        <div className="relative mt-3">
-                            <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                aria-hidden="true"
-                                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
-                            >
-                                <circle cx="11" cy="11" r="8" />
-                                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        <div className="relative">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted">
+                                <circle cx="11" cy="11" r="7" />
+                                <path d="m20 20-3.5-3.5" />
                             </svg>
                             <input
                                 type="search"
@@ -934,383 +577,247 @@ export default function CalendarClient({
                                     setSearchQuery(e.target.value);
                                     setClipPage(1);
                                 }}
-                                aria-label="Search clips by title"
-                                placeholder="Search clips or source video..."
-                                className="block w-full rounded-xl border border-slate-800 bg-slate-950/90 py-2 pl-9 pr-3 text-xs text-slate-100 placeholder:text-slate-500 transition focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                aria-label="Search clips"
+                                placeholder="Search clips"
+                                className={`${ui.input} h-10 pl-9 text-sm`}
                             />
+                        </div>
+                        <div className={ui.segTrack} role="radiogroup" aria-label="Which clips to show">
+                            {([
+                                [false, "All clips"],
+                                [true, "Not scheduled"],
+                            ] as const).map(([value, label]) => (
+                                <button
+                                    key={label}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={onlyUnscheduled === value}
+                                    onClick={() => {
+                                        setOnlyUnscheduled(value);
+                                        setClipPage(1);
+                                    }}
+                                    className={`${ui.segOption(onlyUnscheduled === value)} h-8`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
-                    <div className="flex-1 space-y-3 overflow-y-auto p-4">
+                    <div className="flex-1 overflow-y-auto p-2">
                         {filteredClips.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-[#0A0D14] px-5 py-10 text-center">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800/80 text-slate-400">
-                                    <svg
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="1.75"
-                                        aria-hidden="true"
-                                        className="h-5 w-5"
-                                    >
-                                        <rect
-                                            x="2"
-                                            y="2"
-                                            width="20"
-                                            height="20"
-                                            rx="2.18"
-                                            ry="2.18"
-                                        />
-                                        <line x1="7" y1="2" x2="7" y2="22" />
-                                        <line x1="17" y1="2" x2="17" y2="22" />
-                                        <line x1="2" y1="12" x2="22" y2="12" />
-                                    </svg>
-                                </div>
-                                <p className="mt-3 text-sm font-semibold text-slate-200">
-                                    No matching clips
+                            <div className="px-3 py-10 text-center">
+                                <p className="text-sm font-semibold">
+                                    {initialClips.length === 0 ? "No clips yet" : "No clips match"}
                                 </p>
-                                <p className="mt-1 max-w-[220px] text-xs leading-relaxed text-slate-400">
-                                    {onlyUnscheduled
-                                        ? "All available clips have been scheduled. Uncheck the filter to re-queue."
-                                        : "Process a video in the studio or clear your search query."}
+                                <p className="mx-auto mt-1 max-w-[30ch] text-[13px] text-muted">
+                                    {initialClips.length === 0
+                                        ? "Clips appear here once a video finishes processing."
+                                        : onlyUnscheduled
+                                            ? "Every clip is already scheduled. Show all clips to reuse one."
+                                            : "Try a different search."}
                                 </p>
+                                {initialClips.length === 0 && (
+                                    <Link href="/" className={`${ui.btnSecondarySm} mt-4`}>
+                                        Upload a video
+                                    </Link>
+                                )}
                             </div>
                         ) : (
-                            paginatedClips.map((clip) => (
-                                <DraggableClipCard
-                                    key={clip.id}
-                                    clip={clip}
-                                    scheduledCount={
-                                        scheduledCountByClipId.get(clip.id) ?? 0
-                                    }
-                                    onQuickSchedule={(c) =>
-                                        openScheduleModal(c)
-                                    }
-                                />
-                            ))
+                            <ul className="space-y-0.5">
+                                {paginatedClips.map((clip) => (
+                                    <LibraryClip
+                                        key={clip.id}
+                                        clip={clip}
+                                        scheduledCount={scheduledCountByClipId.get(clip.id) ?? 0}
+                                        onSchedule={(c) => openScheduleModal(c)}
+                                    />
+                                ))}
+                            </ul>
                         )}
                     </div>
+
                     {filteredClips.length > CLIPS_PER_PAGE && (
-                        <div className="flex items-center justify-between border-t border-slate-800/90 px-4 py-3">
-                            <button
-                                type="button"
-                                onClick={() => setClipPage((page) => Math.max(1, page - 1))}
-                                disabled={validClipPage === 1}
-                                className="rounded-lg border border-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                            >
+                        <div className="flex items-center justify-between border-t border-line px-3 py-2">
+                            <button type="button" onClick={() => setClipPage((p) => Math.max(1, p - 1))} disabled={validClipPage === 1} className={ui.btnQuiet}>
                                 Previous
                             </button>
-                            <span className="text-xs text-slate-400" aria-live="polite">
-                                Page {validClipPage} of {totalClipPages}
+                            <span className="text-[13px] tabular-nums text-muted" aria-live="polite">
+                                {validClipPage} of {totalClipPages}
                             </span>
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    setClipPage((page) =>
-                                        Math.min(totalClipPages, page + 1),
-                                    )
-                                }
-                                disabled={validClipPage === totalClipPages}
-                                className="rounded-lg border border-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                            >
+                            <button type="button" onClick={() => setClipPage((p) => Math.min(totalClipPages, p + 1))} disabled={validClipPage === totalClipPages} className={ui.btnQuiet}>
                                 Next
                             </button>
                         </div>
                     )}
+                    {filteredClips.length > 0 && (
+                        <p className="hidden border-t border-line px-4 py-3 text-[13px] text-muted lg:block">
+                            Drag a clip onto a day to schedule it.
+                        </p>
+                    )}
                 </aside>
 
-                {/* RIGHT MAIN WORKSPACE: Calendar */}
-                <section
-                    aria-label="Monthly Content Schedule"
-                    className="flex min-h-[calc(100vh-73px)] flex-col bg-slate-950"
-                >
-                    {/* Calendar Top Control Bar */}
-                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/90 bg-[#0A0D14] px-6 py-3.5">
-                        {/* Left: Month Title & 44px Touch-Friendly Navigation */}
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center rounded-xl border border-slate-800 bg-slate-900 p-0.5">
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setCurrentMonth((m) => subMonths(m, 1))
-                                    }
-                                    aria-label="Previous month"
-                                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-                                >
-                                    <svg
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                        aria-hidden="true"
-                                        className="h-4 w-4"
-                                    >
-                                        <polyline points="15 18 9 12 15 6" />
-                                    </svg>
+                {/* Month */}
+                <section aria-label="Monthly posting schedule" className="flex min-w-0 flex-1 flex-col lg:overflow-y-auto">
+                    <header className="flex flex-wrap items-end justify-between gap-4 px-4 pb-4 pt-6 sm:px-6">
+                        <div>
+                            <h1 className={ui.h1}>{format(currentMonth, "MMMM yyyy")}</h1>
+                            <p className="mt-1 text-base text-muted">{summary} this month.</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center">
+                                <button type="button" onClick={() => setCurrentMonth((m) => subMonths(m, 1))} aria-label="Previous month" className={ui.btnIcon}>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="h-4 w-4"><path d="m15 18-6-6 6-6" /></svg>
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setCurrentMonth(new Date())}
-                                    className="px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-                                >
+                                <button type="button" onClick={() => setCurrentMonth(new Date())} className={ui.btnSecondarySm}>
                                     Today
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setCurrentMonth((m) => addMonths(m, 1))
-                                    }
-                                    aria-label="Next month"
-                                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-                                >
-                                    <svg
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                        aria-hidden="true"
-                                        className="h-4 w-4"
-                                    >
-                                        <polyline points="9 18 15 12 9 6" />
-                                    </svg>
+                                <button type="button" onClick={() => setCurrentMonth((m) => addMonths(m, 1))} aria-label="Next month" className={ui.btnIcon}>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="h-4 w-4"><path d="m9 18 6-6-6-6" /></svg>
                                 </button>
                             </div>
-
-                            <div>
-                                <h2 className="text-lg font-bold tracking-tight text-white">
-                                    {format(currentMonth, "MMMM yyyy")}
-                                </h2>
-                                <p className="text-xs text-slate-400">
-                                    <span className="font-semibold text-slate-200">
-                                        {monthMetrics.scheduled}
-                                    </span>{" "}
-                                    queued ·{" "}
-                                    <span className="font-semibold text-emerald-400">
-                                        {monthMetrics.published}
-                                    </span>{" "}
-                                    published this month
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Right: Interactive Platform Filter Pills */}
-                        <div
-                            role="group"
-                            aria-label="Filter calendar by platform"
-                            className="flex flex-wrap items-center gap-1.5"
-                        >
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setPlatformFilter("ALL");
-                                    setClipPage(1);
-                                }}
-                                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${platformFilter === "ALL"
-                                    ? "border-sky-400/60 bg-sky-400/15 text-sky-200"
-                                    : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-                                    }`}
-                            >
-                                All Channels
-                            </button>
-
-                            {(
-                                Object.keys(
-                                    PLATFORM_META,
-                                ) as SocialPlatformType[]
-                            ).map((platform) => {
-                                const meta = PLATFORM_META[platform];
-                                const active = platformFilter === platform;
-                                return (
+                            <div role="radiogroup" aria-label="Show posts for" className={ui.segTrack}>
+                                <button type="button" role="radio" aria-checked={platformFilter === "ALL"} onClick={() => setPlatformFilter("ALL")} className={`${ui.segOption(platformFilter === "ALL")} h-8 flex-none`}>
+                                    All
+                                </button>
+                                {PLATFORMS.map((platform) => (
                                     <button
                                         key={platform}
                                         type="button"
-                                        onClick={() => {
-                                            setPlatformFilter(
-                                                active ? "ALL" : platform,
-                                            );
-                                            setClipPage(1);
-                                        }}
-                                        className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${active
-                                            ? meta.activeRing
-                                            : "border-slate-800 bg-slate-900/90 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-                                            }`}
+                                        role="radio"
+                                        aria-checked={platformFilter === platform}
+                                        aria-label={PLATFORM_LABEL[platform].label}
+                                        title={PLATFORM_LABEL[platform].label}
+                                        onClick={() => setPlatformFilter(platform)}
+                                        className={`${ui.segOption(platformFilter === platform)} h-8 flex-none px-2.5`}
                                     >
-                                        <span className={meta.iconColor}>
-                                            <PlatformIcon
-                                                platform={platform}
-                                                className="h-3.5 w-3.5"
-                                            />
-                                        </span>
-                                        <span>{meta.shortLabel}</span>
+                                        <PlatformIcon platform={platform} className={`h-4 w-4 ${PLATFORM_COLOR[platform]}`} />
+                                        <span className="hidden xl:inline">{PLATFORM_LABEL[platform].short}</span>
                                     </button>
-                                );
-                            })}
+                                ))}
+                            </div>
+                        </div>
+                    </header>
+
+                    {notice && (
+                        <div role="status" className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-lg border border-line bg-raised px-3 py-2 text-sm sm:mx-6">
+                            <span>{notice}</span>
+                            <button type="button" onClick={() => setNotice(null)} className={`${ui.btnQuiet} h-7 px-2`}>
+                                Dismiss
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Grid (tablet and up) */}
+                    <div className="hidden px-4 pb-6 sm:px-6 md:block">
+                        <div className="overflow-hidden rounded-xl border border-line">
+                            <div className="grid grid-cols-7 border-b border-line bg-surface">
+                                {WEEKDAYS.map((name) => (
+                                    <div key={name} className="px-2 py-2 text-[13px] font-medium text-muted">
+                                        {name}
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="-mb-px -mr-px grid grid-cols-7">
+                                {calendarDays.map((day) => (
+                                    <DayCell
+                                        key={day.toISOString()}
+                                        day={day}
+                                        inMonth={isSameMonth(day, currentMonth)}
+                                        posts={postsByDay.get(format(day, "yyyy-MM-dd")) ?? []}
+                                        canAdd={Boolean(firstClip)}
+                                        onAdd={(date) => firstClip && openScheduleModal(firstClip, date)}
+                                        onSelectPost={setSelectedPost}
+                                    />
+                                ))}
+                            </div>
                         </div>
                     </div>
 
-                    {/* Weekday Column Headers */}
-                    <div className="grid grid-cols-7 border-b border-slate-800 bg-slate-900/80 text-center text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-                            (dayName) => (
-                                <div
-                                    key={dayName}
-                                    className="border-r border-slate-800/80 py-2.5 last:border-r-0"
-                                >
-                                    {dayName}
-                                </div>
-                            ),
+                    {/* Agenda (phones) */}
+                    <div className="px-4 pb-8 md:hidden">
+                        {monthAgenda.length === 0 ? (
+                            <div className="rounded-xl border border-line px-4 py-10 text-center">
+                                <p className="text-sm font-semibold">Nothing scheduled in {format(currentMonth, "MMMM")}</p>
+                                <p className="mt-1 text-[13px] text-muted">Pick a clip above and choose Schedule.</p>
+                            </div>
+                        ) : (
+                            <ol className="space-y-5">
+                                {monthAgenda.map(({ day, posts: dayPosts }) => (
+                                    <li key={day.toISOString()}>
+                                        <p className={`mb-2 text-sm font-semibold ${isToday(day) ? "text-link" : "text-ink"}`}>
+                                            {format(day, "EEEE d MMMM")}
+                                        </p>
+                                        <div className="space-y-1.5">
+                                            {dayPosts.map((post) => (
+                                                <button
+                                                    key={post.id}
+                                                    type="button"
+                                                    onClick={() => setSelectedPost(post)}
+                                                    className={`flex w-full items-center gap-3 rounded-lg border border-line bg-raised px-3 py-2.5 text-left ${ui.focusRing}`}
+                                                >
+                                                    <PlatformIcon platform={post.platform} className={`h-4 w-4 shrink-0 ${PLATFORM_COLOR[post.platform]}`} />
+                                                    <span className="w-12 shrink-0 text-sm tabular-nums text-muted">{format(parseISO(post.scheduledFor), "HH:mm")}</span>
+                                                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{post.segmentTitle}</span>
+                                                    <span className={`${badgeBase} ${STATUS_BADGE[post.status].className}`}>{STATUS_BADGE[post.status].label}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ol>
                         )}
-                    </div>
-
-                    {/* 7-Column Calendar Grid */}
-                    <div className="grid flex-1 grid-cols-7">
-                        {calendarDays.map((day) => {
-                            const dayPosts = posts.filter(
-                                (p) =>
-                                    p.status !== "CANCELLED" &&
-                                    (platformFilter === "ALL" ||
-                                        p.platform === platformFilter) &&
-                                    isSameDay(parseISO(p.scheduledFor), day),
-                            );
-
-                            return (
-                                <DroppableCalendarDayCell
-                                    key={day.toISOString()}
-                                    day={day}
-                                    isCurrentMonth={isSameMonth(
-                                        day,
-                                        currentMonth,
-                                    )}
-                                    posts={dayPosts}
-                                    onAddClick={(targetDate) => {
-                                        const defaultClip =
-                                            filteredClips[0] ?? initialClips[0];
-                                        if (defaultClip) {
-                                            openScheduleModal(
-                                                defaultClip,
-                                                targetDate,
-                                            );
-                                        }
-                                    }}
-                                    onSelectPost={(post) =>
-                                        setSelectedPost(post)
-                                    }
-                                />
-                            );
-                        })}
                     </div>
                 </section>
             </div>
 
-            {/* Drag Overlay with Spatial Continuity */}
             <DragOverlay>
                 {activeDrag?.type === "CLIP" && (
-                    <div className="flex w-72 items-center gap-3 rounded-xl border border-sky-400 bg-slate-900/95 p-3 shadow-2xl ring-4 ring-sky-500/20">
-                        <div className="flex h-12 w-9 shrink-0 items-center justify-center rounded-md bg-slate-950 font-mono text-[10px] font-bold text-sky-300">
-                            {formatDurationBadge(
-                                activeDrag.clip.durationSeconds,
-                            )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <span className="inline-block rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-sky-300">
-                                {activeDrag.clip.thumbnailText}
-                            </span>
-                            <p className="mt-1 truncate text-xs font-semibold text-white">
-                                {activeDrag.clip.title}
-                            </p>
-                        </div>
+                    <div className="flex w-64 items-center gap-3 rounded-lg border border-action bg-raised p-2 shadow-[0_24px_48px_-24px_rgba(14,20,36,0.5)]">
+                        <ClipThumb clip={activeDrag.clip} className="h-14 w-8" />
+                        <p className="line-clamp-2 text-sm font-semibold">{activeDrag.clip.title}</p>
                     </div>
                 )}
                 {activeDrag?.type === "POST" && (
-                    <div className="flex w-60 items-center gap-2 rounded-lg border border-sky-400 bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-2xl ring-4 ring-sky-500/20">
-                        <span
-                            className={
-                                PLATFORM_META[activeDrag.post.platform]
-                                    .iconColor
-                            }
-                        >
-                            <PlatformIcon
-                                platform={activeDrag.post.platform}
-                                className="h-4 w-4"
-                            />
-                        </span>
-                        <span className="truncate">
-                            Move: {activeDrag.post.segmentTitle}
-                        </span>
+                    <div className="flex h-8 w-56 items-center gap-2 rounded-md border border-action bg-raised px-2 text-[13px] font-medium shadow-[0_24px_48px_-24px_rgba(14,20,36,0.5)]">
+                        <PlatformIcon platform={activeDrag.post.platform} className={`h-3.5 w-3.5 ${PLATFORM_COLOR[activeDrag.post.platform]}`} />
+                        <span className="truncate">{activeDrag.post.segmentTitle}</span>
                     </div>
                 )}
             </DragOverlay>
 
-            {/* SCHEDULE POST MODAL */}
+            {/* Schedule modal */}
             {isScheduleModalOpen && modalClip && (
-                <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="schedule-modal-title"
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
-                >
-                    <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-800 bg-[#0A0D14] shadow-2xl">
-                        {/* Modal Header */}
-                        <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-                            <div>
-                                <span className="text-[11px] font-semibold uppercase tracking-widest text-sky-400">
-                                    Schedule Distribution
-                                </span>
-                                <h3
-                                    id="schedule-modal-title"
-                                    className="mt-0.5 text-base font-bold text-white"
-                                >
-                                    {modalClip.title}
-                                </h3>
+                <div role="dialog" aria-modal="true" aria-labelledby="schedule-title" className={ui.modalBackdrop}>
+                    <div className={`${ui.modal} max-h-[calc(100vh-2rem)] max-w-2xl overflow-y-auto`}>
+                        <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-4">
+                            <div className="min-w-0">
+                                <h2 id="schedule-title" className={ui.h2}>Schedule a clip</h2>
+                                <p className="mt-0.5 truncate text-sm text-muted">{modalClip.parentVideoTitle}</p>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setIsScheduleModalOpen(false)}
-                                aria-label="Close schedule modal"
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-                            >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className="h-4 w-4">
-                                    <line x1="18" y1="6" x2="6" y2="18" />
-                                    <line x1="6" y1="6" x2="18" y2="18" />
-                                </svg>
+                            <button type="button" onClick={() => setIsScheduleModalOpen(false)} aria-label="Close" className={ui.btnIcon}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="h-4 w-4"><path d="M18 6 6 18M6 6l12 12" /></svg>
                             </button>
                         </div>
 
-                        <form
-                            onSubmit={handleScheduleSubmit}
-                            className="grid grid-cols-1 gap-6 p-6 md:grid-cols-[200px_1fr]"
-                        >
-                            {/* Left Column: Media Preview */}
-                            <div className="flex flex-col justify-between rounded-xl border border-slate-800 bg-slate-950 p-3">
-                                <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-slate-900">
+                        <form onSubmit={handleScheduleSubmit} className="grid gap-6 p-6 sm:grid-cols-[168px_minmax(0,1fr)]">
+                            <div className="hidden sm:block">
+                                <div className="aspect-[9/16] overflow-hidden rounded-xl bg-frame">
                                     {modalClip.previewVideoUrl ? (
                                         <video src={modalClip.previewVideoUrl} poster={modalClip.thumbnailUrl ?? undefined} controls preload="metadata" className="h-full w-full object-cover" />
-                                    ) : modalClip.thumbnailUrl ? (
-                                        <img src={modalClip.thumbnailUrl} alt={modalClip.title} className="h-full w-full object-cover" />
                                     ) : (
-                                        <div className="flex h-full flex-col items-center justify-center p-4 text-center">
-                                            <span className="rounded bg-sky-500/15 px-2 py-1 text-[10px] font-bold text-sky-300">
-                                                {modalClip.thumbnailText}
-                                            </span>
-                                            <p className="mt-2 text-xs text-slate-400">{modalClip.title}</p>
-                                        </div>
+                                        <ClipThumb clip={modalClip} className="h-full w-full rounded-none" />
                                     )}
                                 </div>
-                                <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
-                                    <span>Duration</span>
-                                    <span className="font-mono font-semibold text-slate-200">
-                                        {formatDurationBadge(modalClip.durationSeconds)}
-                                    </span>
-                                </div>
+                                <p className="mt-2 text-[13px] text-muted">
+                                    <span className="tabular-nums">{clipLength(modalClip.durationSeconds)}</span>, {RATIO_LABEL[modalClip.aspectRatio]}
+                                </p>
                             </div>
 
-                            {/* Right Column: Form Controls */}
-                            <div className="space-y-4">
-                                {/* Clip Selector */}
-                                <div>
-                                    <label htmlFor="schedule-clip-select" className="mb-1.5 block text-xs font-semibold text-slate-300">Active Clip</label>
+                            <div className="space-y-5">
+                                <label className="block">
+                                    <span className={ui.label}>Clip</span>
                                     <select
-                                        id="schedule-clip-select"
                                         value={modalClip.id}
                                         onChange={(e) => {
                                             const found = initialClips.find((c) => c.id === e.target.value);
@@ -1319,128 +826,88 @@ export default function CalendarClient({
                                                 setModalCaption(found.socialCaption || found.title);
                                             }
                                         }}
-                                        className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                        className={ui.input}
                                     >
                                         {initialClips.map((c) => (
                                             <option key={c.id} value={c.id}>
-                                                {c.title} ({formatDurationBadge(c.durationSeconds)})
+                                                {c.title}
                                             </option>
                                         ))}
                                     </select>
-                                </div>
+                                </label>
 
-                                {/* Target Channels */}
-                                <div>
-                                    <div className="mb-1.5 flex items-center justify-between">
-                                        <span className="text-xs font-semibold text-slate-300">Target Channels</span>
-                                        <span className="text-[11px] text-slate-400">{selectedAccountIds.length} selected</span>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {accounts.map((acc) => {
-                                            const isSelected = selectedAccountIds.includes(acc.id);
-                                            const meta = PLATFORM_META[acc.platform];
-                                            return (
+                                <fieldset>
+                                    <legend className={ui.label}>Post to</legend>
+                                    {accounts.length === 0 ? (
+                                        <p className="rounded-lg border border-line bg-surface p-3 text-sm text-muted">
+                                            No accounts connected yet.{" "}
+                                            <Link href="/channels" className="font-medium text-link underline underline-offset-2">
+                                                Connect an account
+                                            </Link>{" "}
+                                            to schedule posts.
+                                        </p>
+                                    ) : (
+                                        <div className="flex flex-wrap gap-2">
+                                            {accounts.map((acc) => (
                                                 <button
                                                     key={acc.id}
                                                     type="button"
-                                                    aria-pressed={isSelected}
+                                                    aria-pressed={selectedAccountIds.includes(acc.id)}
                                                     onClick={() => toggleAccountSelection(acc.id)}
-                                                    className={`flex min-h-[42px] items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${isSelected ? meta.activeRing : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"}`}
+                                                    className={ui.chip(selectedAccountIds.includes(acc.id))}
                                                 >
-                                                    <span className={meta.iconColor}>
-                                                        <PlatformIcon platform={acc.platform} className="h-4 w-4" />
-                                                    </span>
-                                                    <span className="truncate">{acc.accountName}</span>
+                                                    <PlatformIcon platform={acc.platform} className={`h-4 w-4 ${PLATFORM_COLOR[acc.platform]}`} />
+                                                    <span className="max-w-[16ch] truncate">{acc.accountName}</span>
                                                 </button>
-                                            );
-                                        })}
-                                    </div>
-                                    {formError && <p role="alert" className="mt-1.5 text-xs font-medium text-rose-400">{formError}</p>}
-                                </div>
-
-                                {/* TIKTOK PUBLISH MODE TOGGLE (Only visible if TikTok is selected) */}
-                                {accounts.some((acc) => selectedAccountIds.includes(acc.id) && acc.platform.toUpperCase() === "TIKTOK") && (
-                                    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
-                                        <label className="mb-2 block text-xs font-semibold text-slate-300">
-                                            TikTok Publishing Mode
-                                        </label>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => setTiktokPublishType("DIRECT")}
-                                                className={`flex items-center justify-center rounded-lg border px-3 py-2 text-[11px] font-medium transition ${tiktokPublishType === "DIRECT"
-                                                        ? "border-sky-500 bg-sky-500/10 text-sky-400"
-                                                        : "border-slate-700 bg-slate-950 text-slate-400 hover:border-slate-600 hover:text-slate-200"
-                                                    }`}
-                                            >
-                                                Direct Post
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setTiktokPublishType("DRAFT")}
-                                                className={`flex items-center justify-center rounded-lg border px-3 py-2 text-[11px] font-medium transition ${tiktokPublishType === "DRAFT"
-                                                        ? "border-sky-500 bg-sky-500/10 text-sky-400"
-                                                        : "border-slate-700 bg-slate-950 text-slate-400 hover:border-slate-600 hover:text-slate-200"
-                                                    }`}
-                                            >
-                                                Send to Drafts
-                                            </button>
+                                            ))}
                                         </div>
-                                        {tiktokPublishType === "DRAFT" && (
-                                            <p className="mt-2 text-[10px] leading-relaxed text-amber-400/90">
-                                                Note: TikTok allows only 5 pending draft uploads per creator in 24 hours. Captions are disabled for drafts; after uploading, open TikTok <strong>Inbox &rarr; System Notifications</strong> to edit and post.
-                                            </p>
-                                        )}
-                                    </div>
-                                )}
+                                    )}
+                                </fieldset>
 
-                                {/* Date & Time + Quick Presets */}
                                 <div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <label className="block">
-                                            <span className="mb-1.5 block text-xs font-semibold text-slate-300">Publish Date</span>
-                                            <input type="date" required value={modalDateString} onChange={(e) => setModalDateString(e.target.value)} className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400" />
+                                            <span className={ui.label}>Date</span>
+                                            <input type="date" required value={modalDateString} onChange={(e) => setModalDateString(e.target.value)} className={ui.input} />
                                         </label>
                                         <label className="block">
-                                            <span className="mb-1.5 block text-xs font-semibold text-slate-300">Publish Time</span>
-                                            <input type="time" required value={modalTimeString} onChange={(e) => setModalTimeString(e.target.value)} className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400" />
+                                            <span className={ui.label}>Time</span>
+                                            <input type="time" required value={modalTimeString} onChange={(e) => setModalTimeString(e.target.value)} className={ui.input} />
                                         </label>
                                     </div>
-                                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                        <span className="mr-1 text-[11px] text-slate-400">Quick slots:</span>
-                                        {QUICK_TIME_PRESETS.map((preset) => (
-                                            <button key={preset.time} type="button" onClick={() => setModalTimeString(preset.time)} className={`rounded-md border px-2 py-0.5 font-mono text-[11px] transition ${modalTimeString === preset.time ? "border-sky-400/60 bg-sky-400/15 text-sky-300" : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200"}`}>
+                                    <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Common posting times">
+                                        {QUICK_TIMES.map((preset) => (
+                                            <button key={preset.time} type="button" onClick={() => setModalTimeString(preset.time)} aria-pressed={modalTimeString === preset.time} className={`${ui.chip(modalTimeString === preset.time)} h-8 px-2.5 tabular-nums`}>
                                                 {preset.display}
                                             </button>
                                         ))}
                                     </div>
                                 </div>
 
-                                {/* Caption (Disabled if DRAFT is selected) */}
-                                <div>
-                                    <div className="mb-1.5 flex items-center justify-between">
-                                        <label htmlFor="schedule-caption-input" className="text-xs font-semibold text-slate-300">Caption & Hashtags</label>
-                                        <span className="font-mono text-[11px] text-slate-400">{modalCaption.length} / 2200</span>
-                                    </div>
-                                    <textarea
-                                        id="schedule-caption-input"
-                                        rows={3}
-                                        maxLength={2200}
-                                        value={modalCaption}
-                                        disabled={tiktokPublishType === "DRAFT"}
-                                        onChange={(e) => setModalCaption(e.target.value)}
-                                        placeholder="Write a hook and relevant hashtags (#shorts #reels #tiktok)..."
-                                        className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs leading-relaxed text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    />
-                                </div>
+                                <label className="block">
+                                    <span className="mb-1.5 flex items-baseline justify-between">
+                                        <span className="text-[13px] font-medium">Caption</span>
+                                        <span className="text-[13px] tabular-nums text-muted">{modalCaption.length} / 2200</span>
+                                    </span>
+                                    <textarea rows={4} maxLength={2200} value={modalCaption} onChange={(e) => setModalCaption(e.target.value)} className={ui.textarea} />
+                                </label>
 
-                                {/* Submit Actions */}
-                                <div className="flex items-center justify-end gap-2.5 border-t border-slate-800 pt-4">
-                                    <button type="button" onClick={() => setIsScheduleModalOpen(false)} className="min-h-[40px] rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white">
+                                {formError && (
+                                    <p role="alert" className="text-sm font-medium text-danger">
+                                        {formError}
+                                    </p>
+                                )}
+
+                                <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-4">
+                                    <button type="button" onClick={() => setIsScheduleModalOpen(false)} className={ui.btnSecondary}>
                                         Cancel
                                     </button>
-                                    <button type="submit" disabled={isSubmitting} className="min-h-[40px] rounded-xl bg-sky-400 px-5 py-2 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-sky-300 disabled:opacity-50">
-                                        {isSubmitting ? "Queueing Post..." : `Confirm Schedule (${selectedAccountIds.length})`}
+                                    <button type="submit" disabled={isSubmitting || accounts.length === 0} className={ui.btnPrimary}>
+                                        {isSubmitting
+                                            ? "Scheduling"
+                                            : selectedAccountIds.length > 1
+                                                ? `Schedule to ${selectedAccountIds.length} accounts`
+                                                : "Schedule post"}
                                     </button>
                                 </div>
                             </div>
@@ -1449,141 +916,68 @@ export default function CalendarClient({
                 </div>
             )}
 
-            {/* POST DETAILS MODAL */}
+            {/* Post details */}
             {selectedPost && (
-                <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="post-detail-title"
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
-                >
-                    <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-                        <div className="flex items-center justify-between">
-                            <span
-                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_META[selectedPost.status].badgeClass
-                                    }`}
-                            >
-                                <span
-                                    className={`h-1.5 w-1.5 rounded-full ${STATUS_META[selectedPost.status].dotClass
-                                        }`}
-                                />
-                                {STATUS_META[selectedPost.status].label}
-                            </span>
-                            <button
-                                type="button"
-                                onClick={() => setSelectedPost(null)}
-                                aria-label="Close post details"
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-                            >
-                                <svg
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    aria-hidden="true"
-                                    className="h-4 w-4"
-                                >
-                                    <line x1="18" y1="6" x2="6" y2="18" />
-                                    <line x1="6" y1="6" x2="18" y2="18" />
-                                </svg>
+                <div role="dialog" aria-modal="true" aria-labelledby="post-title" className={ui.modalBackdrop}>
+                    <div className={`${ui.modal} max-w-md p-6`}>
+                        <div className="flex items-start justify-between gap-4">
+                            <span className={`${badgeBase} ${STATUS_BADGE[selectedPost.status].className}`}>{STATUS_BADGE[selectedPost.status].label}</span>
+                            <button type="button" onClick={() => setSelectedPost(null)} aria-label="Close" className={`${ui.btnIcon} -mr-2 -mt-1`}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="h-4 w-4"><path d="M18 6 6 18M6 6l12 12" /></svg>
                             </button>
                         </div>
+                        <h2 id="post-title" className={`${ui.h2} mt-3`}>{selectedPost.segmentTitle}</h2>
 
-                        <h3
-                            id="post-detail-title"
-                            className="mt-3 text-base font-bold text-white"
-                        >
-                            {selectedPost.segmentTitle}
-                        </h3>
-
-                        {/* NEW: LIVE VIDEO LINK BLOCK */}
-                        {selectedPost.status === "PUBLISHED" && selectedPost.publishedUrl && (
-                            <div className="mt-4 flex flex-col gap-3 rounded-xl border border-sky-400/20 bg-sky-400/10 p-4">
-                                <div className="flex items-center gap-2">
-                                    <span className="flex h-2.5 w-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]" aria-hidden="true"></span>
-                                    <span className="text-sm font-medium text-sky-400">Successfully Published</span>
-                                </div>
-                                <a
-                                    href={selectedPost.publishedUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-sky-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-sky-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
-                                >
-                                    View Live Video
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                                        <polyline points="15 3 21 3 21 9"></polyline>
-                                        <line x1="10" y1="14" x2="21" y2="3"></line>
-                                    </svg>
-                                </a>
+                        <dl className="mt-4 divide-y divide-line rounded-lg border border-line text-sm">
+                            <div className="flex items-center justify-between gap-4 px-3 py-2.5">
+                                <dt className="text-muted">Account</dt>
+                                <dd className="inline-flex min-w-0 items-center gap-1.5 font-medium">
+                                    <PlatformIcon platform={selectedPost.platform} className={`h-4 w-4 shrink-0 ${PLATFORM_COLOR[selectedPost.platform]}`} />
+                                    <span className="truncate">{selectedPost.accountName}</span>
+                                </dd>
                             </div>
-                        )}
-
-                        <div className="mt-4 space-y-1.5 rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-xs">
-                            <div className="flex items-center justify-between">
-                                <span className="text-slate-400">Channel</span>
-                                <span className="inline-flex items-center gap-1.5 font-semibold text-slate-100">
-                                    <span
-                                        className={
-                                            PLATFORM_META[selectedPost.platform].iconColor
-                                        }
-                                    >
-                                        <PlatformIcon
-                                            platform={selectedPost.platform}
-                                            className="h-3.5 w-3.5"
-                                        />
-                                    </span>
-                                    {PLATFORM_META[selectedPost.platform].label}{" "}
-                                    ({selectedPost.accountName})
-                                </span>
+                            <div className="flex items-center justify-between gap-4 px-3 py-2.5">
+                                <dt className="text-muted">{selectedPost.status === "PUBLISHED" ? "Published" : "Posts on"}</dt>
+                                <dd className="font-medium tabular-nums">{format(parseISO(selectedPost.scheduledFor), "EEE d MMM yyyy, HH:mm")}</dd>
                             </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-slate-400">
-                                    Publish Slot
-                                </span>
-                                <span className="font-mono font-medium text-slate-200">
-                                    {format(
-                                        parseISO(selectedPost.scheduledFor),
-                                        "MMM d, yyyy · h:mm a",
-                                    )}
-                                </span>
-                            </div>
-                        </div>
+                        </dl>
 
-                        <div className="mt-4">
-                            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                                Scheduled Caption
-                            </span>
-                            <div className="max-h-32 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs leading-relaxed text-slate-300">
-                                {selectedPost.caption || "No caption provided."}
-                            </div>
-                        </div>
+                        <p className="mt-4 text-[13px] font-medium">Caption</p>
+                        <p className="mt-1.5 max-h-36 overflow-y-auto whitespace-pre-wrap rounded-lg bg-surface p-3 text-sm leading-relaxed">
+                            {selectedPost.caption || "No caption"}
+                        </p>
 
-                        <div className="mt-6 flex items-center justify-between gap-3">
-                            {/* Hide cancel button if it's already published */}
+                        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
                             {selectedPost.status !== "PUBLISHED" ? (
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        handleCancelScheduledPost(selectedPost.id)
-                                    }
-                                    className="min-h-[38px] rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
-                                >
-                                    Remove from Queue
+                                <button type="button" onClick={() => void handleCancelScheduledPost(selectedPost)} className={ui.btnDanger}>
+                                    Remove from schedule
                                 </button>
                             ) : (
-                                <div></div> /* Spacer to push 'Done' to the right */
+                                <span />
                             )}
-                            <button
-                                type="button"
-                                onClick={() => setSelectedPost(null)}
-                                className="min-h-[38px] rounded-xl bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-                            >
-                                Done
-                            </button>
+                            {selectedPost.status === "PUBLISHED" && selectedPost.publishedUrl ? (
+                                <a href={selectedPost.publishedUrl} target="_blank" rel="noopener noreferrer" className={ui.btnPrimarySm}>
+                                    View the post
+                                </a>
+                            ) : (
+                                <button type="button" onClick={() => setSelectedPost(null)} className={ui.btnSecondarySm}>
+                                    Done
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showAuthModal && (
+                <AuthGateModal
+                    reasonMessage="Sign in to schedule posts. You will also connect the accounts you post to."
+                    onClose={() => setShowAuthModal(false)}
+                    onSuccess={() => {
+                        setShowAuthModal(false);
+                        window.location.reload();
+                    }}
+                />
             )}
         </DndContext>
     );

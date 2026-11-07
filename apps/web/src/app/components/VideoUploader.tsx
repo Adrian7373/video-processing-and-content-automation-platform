@@ -18,6 +18,8 @@ import {
     MAX_UPLOAD_FILE_SIZE_BYTES,
 } from "../../../../../packages/database/uploadLimits";
 import type { CreditsStatusResponse } from "@/app/api/credits/route";
+import OutputPreview from "./OutputPreview";
+import CaptionStylePicker from "./CaptionStylePicker";
 
 type UploadStatus = "idle" | "requesting" | "uploading" | "processing" | "error";
 type ProcessingMode = "CLIP" | "CAPTION_ONLY";
@@ -47,10 +49,10 @@ interface ApiErrorPayload {
 
 const statusLabels: Record<UploadStatus, string> = {
     idle: "Ready to upload",
-    requesting: "Verifying credits & preparing secure upload...",
-    uploading: "Uploading video to storage...",
-    processing: "Video queued! 1 credit deducted.",
-    error: "Upload failed. Please try again.",
+    requesting: "Checking your credits and preparing the upload",
+    uploading: "Uploading your video",
+    processing: "Video queued. 1 credit used.",
+    error: "Upload failed. Check your connection and try again.",
 };
 
 const funPhrases: readonly string[] = [
@@ -162,8 +164,40 @@ export default function VideoUploader() {
         return () => window.clearInterval(interval);
     }, [status]);
 
+    const [isDragOver, setIsDragOver] = useState(false);
+
+    const selectFile = (nextFile: File | null) => {
+        setFile(nextFile);
+        readDuration(nextFile);
+        setStatus("idle");
+        setErrorMessage(null);
+        setLastQueuedVideoId(null);
+        setProgress(0);
+    };
+
+    const [fileDuration, setFileDuration] = useState<number | null>(null);
+
+    // Reads the duration for the live preview; unreadable files simply show none.
+    const readDuration = (nextFile: File | null) => {
+        setFileDuration(null);
+        if (!nextFile) return;
+        const url = URL.createObjectURL(nextFile);
+        const probe = document.createElement("video");
+        probe.preload = "metadata";
+        probe.muted = true;
+        const done = (value: number | null) => {
+            URL.revokeObjectURL(url);
+            setFileDuration(value !== null && Number.isFinite(value) && value > 0 ? value : null);
+        };
+        probe.onloadedmetadata = () => done(probe.duration);
+        probe.onerror = () => done(null);
+        probe.src = url;
+    };
+
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-        setFile(event.target.files?.[0] ?? null);
+        const nextFile = event.target.files?.[0] ?? null;
+        setFile(nextFile);
+        readDuration(nextFile);
         setStatus("idle");
         setErrorMessage(null);
         setLastQueuedVideoId(null);
@@ -175,19 +209,35 @@ export default function VideoUploader() {
             throw new Error("Video files must not exceed 300 MB.");
         }
 
+        if (selectedFile.size === 0) {
+            throw new Error("The selected video file is empty.");
+        }
+
         const objectUrl = URL.createObjectURL(selectedFile);
         try {
-            const duration = await new Promise<number>((resolve, reject) => {
+            // Resolves to null when the browser cannot read the metadata (e.g. an
+            // HEVC .mov in Chrome) or never answers. Those files are still valid,
+            // and the worker enforces the 45-minute limit itself with ffprobe.
+            const duration = await new Promise<number | null>((resolve) => {
                 const video = document.createElement("video");
+                const timer = window.setTimeout(() => resolve(null), 10_000);
                 video.preload = "metadata";
-                video.onloadedmetadata = () => resolve(video.duration);
-                video.onerror = () =>
-                    reject(new Error("Unable to read the video duration."));
+                video.muted = true;
+                video.onloadedmetadata = () => {
+                    window.clearTimeout(timer);
+                    resolve(video.duration);
+                };
+                video.onerror = () => {
+                    window.clearTimeout(timer);
+                    resolve(null);
+                };
                 video.src = objectUrl;
             });
 
+            // MediaRecorder WebM reports Infinity until fully scanned; treat that as unknown.
             if (
-                !Number.isFinite(duration) ||
+                duration !== null &&
+                Number.isFinite(duration) &&
                 duration > MAX_UPLOAD_DURATION_SECONDS
             ) {
                 throw new Error("Videos must not exceed 45 minutes.");
@@ -235,6 +285,16 @@ export default function VideoUploader() {
             return;
         }
 
+        // Some browsers (notably on Windows) report an empty MIME type for .mov/.mp4.
+        const extension = file.name.split(".").pop()?.toLowerCase();
+        const contentType =
+            file.type ||
+            (extension === "mov"
+                ? "video/quicktime"
+                : extension === "webm"
+                    ? "video/webm"
+                    : "video/mp4");
+
         try {
             await validateSelectedFile(file);
         } catch (error) {
@@ -265,7 +325,7 @@ export default function VideoUploader() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     filename: file.name,
-                    contentType: file.type,
+                    contentType: contentType,
                     fileSize: file.size,
                     userId: actor?.userId,
                     userPrompt: mode === "CLIP" ? userPrompt : "",
@@ -298,49 +358,60 @@ export default function VideoUploader() {
             const { videoId, s3Key, userId } =
                 (await initializationResponse.json()) as InitVideoSuccessResponse;
 
-            const { uploadUrl } = await getPresignedUploadUrl(
-                {
-                    filename: file.name,
-                    contentType: file.type,
-                    fileSize: file.size,
-                },
-                s3Key,
-            );
-
             setLoadingMessage(pickRandomPhrase());
             setStatus("uploading");
 
-            await new Promise<void>((resolve, reject) => {
-                const xhr = new XMLHttpRequest();
+            // Retry transient network/5xx failures with a fresh presigned URL,
+            // so a brief connection drop does not cost the user their upload.
+            const MAX_UPLOAD_ATTEMPTS = 3;
+            for (let attempt = 1; ; attempt++) {
+                const { uploadUrl } = await getPresignedUploadUrl(
+                    {
+                        filename: file.name,
+                        contentType: contentType,
+                        fileSize: file.size,
+                    },
+                    s3Key,
+                );
 
-                xhr.upload.onprogress = (progressEvent) => {
-                    if (progressEvent.lengthComputable) {
-                        const percentComplete = Math.round(
-                            (progressEvent.loaded / progressEvent.total) * 95,
-                        );
-                        setProgress(percentComplete);
-                    }
-                };
+                const outcome = await new Promise<"ok" | "retry" | "fatal">((resolve) => {
+                    const xhr = new XMLHttpRequest();
 
-                xhr.onload = () => {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        resolve();
-                    } else {
-                        reject(
-                            new Error(
-                                "The video could not be uploaded to storage.",
-                            ),
-                        );
-                    }
-                };
+                    xhr.upload.onprogress = (progressEvent) => {
+                        if (progressEvent.lengthComputable) {
+                            const percentComplete = Math.round(
+                                (progressEvent.loaded / progressEvent.total) * 95,
+                            );
+                            setProgress(percentComplete);
+                        }
+                    };
 
-                xhr.onerror = () =>
-                    reject(new Error("Network error during upload."));
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) resolve("ok");
+                        else if (xhr.status >= 500 || xhr.status === 408 || xhr.status === 429)
+                            resolve("retry");
+                        else resolve("fatal");
+                    };
+                    xhr.onerror = () => resolve("retry");
+                    xhr.ontimeout = () => resolve("retry");
 
-                xhr.open("PUT", uploadUrl);
-                xhr.setRequestHeader("Content-Type", file.type);
-                xhr.send(file);
-            });
+                    xhr.open("PUT", uploadUrl);
+                    xhr.setRequestHeader("Content-Type", contentType);
+                    xhr.send(file);
+                });
+
+                if (outcome === "ok") break;
+                if (outcome === "fatal") {
+                    throw new Error("The video could not be uploaded to storage.");
+                }
+                if (attempt >= MAX_UPLOAD_ATTEMPTS) {
+                    throw new Error(
+                        "Network error during upload. Check your connection and try again.",
+                    );
+                }
+                setProgress(0);
+                await new Promise((resolve) => window.setTimeout(resolve, 2000 * attempt));
+            }
 
             setProgress(98);
 
@@ -414,245 +485,244 @@ export default function VideoUploader() {
 
     return (
         <>
-            <section className="w-full max-w-xl rounded-2xl border border-slate-800 bg-[#0A0D14] p-6 text-slate-100 shadow-2xl shadow-black/40">
-
+            <div className="grid w-full max-w-[1120px] items-start gap-10 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] xl:gap-16">
+            <section className="w-full min-w-0 max-w-xl text-ink">
                 {/* Header */}
-                <div className="mb-6">
-                    <h1 className="text-2xl font-bold tracking-tight text-white">
-                        Upload a video
+                <div className="mb-8">
+                    <h1 className="text-balance font-display text-[clamp(32px,2.4vw+16px,44px)] font-medium leading-[1.08] tracking-[-0.03em] text-ink">
+                        Turn a long video into short clips
                     </h1>
-                    <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
-                        Automatically extract viral 9:16 highlights, burn dynamic
-                        captions, and generate thumbnails.
+                    <p className="mt-3 max-w-[56ch] text-base leading-relaxed text-muted">
+                        We find the strongest moments, add captions and make thumbnails. Clips come back sized for TikTok and YouTube Shorts.
                     </p>
                 </div>
 
-                {/* Exhausted Trial Credits Banner */}
+                {/* Out of trial credits */}
                 {isOutOfCredits && isGuest && (
-                    <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3.5 text-xs">
-                        <div className="text-amber-200">
-                            <p className="font-semibold text-amber-300">
-                                Free trial credits used (0 / 3 left)
-                            </p>
-                            <p className="mt-0.5 text-amber-200/80">
-                                Sign in or create a free account to unlock 10
-                                bonus credits immediately.
-                            </p>
+                    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-action/40 bg-action/15 p-4">
+                        <div>
+                            <p className="text-sm font-semibold text-ink">You have used your 3 trial credits</p>
+                            <p className="mt-0.5 text-sm text-muted">Create a free account to get 10 more.</p>
                         </div>
                         <button
                             type="button"
                             onClick={() => {
                                 setAuthModalReason(
-                                    "Create a free account or sign in to claim 10 bonus credits and continue processing videos.",
+                                    "Create a free account or sign in to get 10 more credits and keep processing videos.",
                                 );
                                 setIsAuthModalOpen(true);
                             }}
-                            className="shrink-0 rounded-xl bg-amber-400 px-3.5 py-2 text-xs font-bold text-slate-950 transition hover:bg-amber-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                            className="inline-flex h-10 shrink-0 items-center rounded-lg bg-action px-4 text-sm font-medium text-action-ink transition hover:bg-action-hover active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page"
                         >
-                            Unlock +10 Credits
+                            Get 10 credits
                         </button>
                     </div>
                 )}
 
-                {/* Mode Selection Tabs */}
-                <div
-                    role="tablist"
-                    aria-label="Processing mode"
-                    className="mb-6 grid grid-cols-2 gap-1 rounded-xl border border-slate-800 bg-slate-950 p-1"
-                >
-                    <button
-                        type="button"
-                        role="tab"
-                        aria-selected={mode === "CLIP"}
-                        onClick={() => setMode("CLIP")}
-                        disabled={isBusy}
-                        className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${mode === "CLIP"
-                            ? "bg-slate-800 text-white shadow-sm"
-                            : "text-slate-400 hover:text-slate-200"
-                            } disabled:opacity-50`}
-                    >
-                        Extract Viral Clips
-                    </button>
-                    <button
-                        type="button"
-                        role="tab"
-                        aria-selected={mode === "CAPTION_ONLY"}
-                        onClick={() => setMode("CAPTION_ONLY")}
-                        disabled={isBusy}
-                        className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${mode === "CAPTION_ONLY"
-                            ? "bg-slate-800 text-white shadow-sm"
-                            : "text-slate-400 hover:text-slate-200"
-                            } disabled:opacity-50`}
-                    >
-                        Caption Full Video
-                    </button>
-                </div>
+                <form className="space-y-6" onSubmit={handleSubmit}>
+                    {/* Mode */}
+                    <div>
+                        <span id="mode-label" className="mb-2 block text-[13px] font-medium text-ink">What should we make?</span>
+                        <div
+                            role="radiogroup"
+                            aria-labelledby="mode-label"
+                            className="grid grid-cols-2 gap-0.5 rounded-lg border border-line bg-surface p-[3px]"
+                        >
+                            {([
+                                ["CLIP", "Short clips"],
+                                ["CAPTION_ONLY", "Captioned full video"],
+                            ] as const).map(([value, label]) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={mode === value}
+                                    onClick={() => {
+                                        setMode(value);
+                                        // A captioned full video needs captions.
+                                        if (value === "CAPTION_ONLY" && captionStyle === "NONE") setCaptionStyle("KARAOKE");
+                                    }}
+                                    disabled={isBusy}
+                                    className={`h-9 rounded-md px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50 ${mode === value
+                                        ? "bg-raised text-ink shadow-[0_0_0_1px_var(--sm-line-strong)]"
+                                        : "text-muted hover:text-ink"
+                                        }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
 
-                <form className="space-y-5" onSubmit={handleSubmit}>
-                    <label className="block">
-                        <span className="mb-2 block text-xs font-semibold text-slate-300">
-                            Video file (MP4, MOV, WebM; max 300 MB, 45 minutes)
-                        </span>
+                    {/* Drop zone */}
+                    <label
+                        onDragOver={(event) => {
+                            event.preventDefault();
+                            if (!isBusy) setIsDragOver(true);
+                        }}
+                        onDragLeave={() => setIsDragOver(false)}
+                        onDrop={(event) => {
+                            event.preventDefault();
+                            setIsDragOver(false);
+                            if (isBusy) return;
+                            const dropped = event.dataTransfer.files?.[0];
+                            if (dropped) selectFile(dropped);
+                        }}
+                        className={`relative grid cursor-pointer justify-items-center gap-2 rounded-xl border-[1.5px] border-dashed px-6 py-10 text-center transition focus-within:ring-2 focus-within:ring-focus ${isDragOver
+                            ? "border-action bg-action/15"
+                            : "border-line-strong bg-surface hover:border-action hover:bg-action/12"
+                            } ${isBusy ? "pointer-events-none opacity-60" : ""}`}
+                    >
                         <input
                             type="file"
                             accept="video/mp4,video/quicktime,video/webm"
                             onChange={handleFileChange}
                             disabled={isBusy}
-                            className="block w-full cursor-pointer rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400 file:mr-4 file:cursor-pointer file:border-0 file:border-r file:border-slate-800 file:bg-slate-900 file:px-4 file:py-3 file:text-xs file:font-semibold file:text-slate-200 hover:file:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="sr-only"
                         />
+                        <span className="mb-1 grid h-11 w-11 place-items-center rounded-xl border border-line bg-raised text-ink">
+                            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
+                            </svg>
+                        </span>
+                        {file ? (
+                            <>
+                                <strong className="max-w-full truncate text-base font-semibold">{file.name}</strong>
+                                <span className="text-[13px] text-muted">
+                                    <span className="tabular-nums">{(file.size / (1024 * 1024)).toFixed(1)} MB</span>. Choose another file to replace it.
+                                </span>
+                            </>
+                        ) : (
+                            <>
+                                <strong className="text-base font-semibold">Drop a video or choose a file</strong>
+                                <span className="text-[13px] text-muted">MP4, MOV or WebM, up to 300&nbsp;MB and 45&nbsp;minutes</span>
+                            </>
+                        )}
                     </label>
 
                     {mode === "CLIP" && (
                         <label className="block">
-                            <span className="mb-2 block text-xs font-semibold text-slate-300">
-                                AI clipping directive (optional)
-                            </span>
+                            <span className="mb-2 block text-[13px] font-medium text-ink">Clip directive</span>
                             <textarea
                                 value={userPrompt}
-                                onChange={(event) =>
-                                    setUserPrompt(event.target.value)
-                                }
+                                onChange={(event) => setUserPrompt(event.target.value)}
                                 maxLength={1000}
                                 rows={3}
-                                placeholder="Find the funniest moments, punchlines, or key technical takeaways..."
+                                placeholder="Find the moments where we talk about pricing"
                                 disabled={isBusy}
-                                className="block w-full resize-y rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs leading-relaxed text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="block w-full resize-y rounded-lg border border-line-strong bg-raised px-3 py-2.5 text-base leading-relaxed text-ink placeholder:text-muted hover:border-muted focus:border-ink focus:outline-none focus:ring-[3px] focus:ring-action/35 disabled:cursor-not-allowed disabled:opacity-50"
                             />
+                            <span className="mt-1.5 block text-[13px] text-muted">Optional. Leave it empty and we pick the strongest moments.</span>
                         </label>
                     )}
 
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <label className="block">
-                            <span className="mb-2 block text-xs font-semibold text-slate-300">
-                                Aspect ratio
-                            </span>
-                            <select
-                                value={aspectRatio}
-                                onChange={(event) =>
-                                    setAspectRatio(
-                                        event.target.value as AspectRatio,
-                                    )
-                                }
-                                disabled={isBusy}
-                                className="block w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2.5 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400 disabled:opacity-50"
-                            >
-                                <option value="VERTICAL_9_16">
-                                    9:16 Vertical (Shorts / Reels / TikTok)
-                                </option>
-                                <option value="LANDSCAPE_16_9">
-                                    16:9 Landscape
-                                </option>
-                                <option value="SQUARE_1_1">1:1 Square</option>
-                            </select>
-                        </label>
+                    <label className="block sm:max-w-[50%]">
+                        <span className="mb-2 block text-[13px] font-medium text-ink">Aspect ratio</span>
+                        <select
+                            value={aspectRatio}
+                            onChange={(event) => setAspectRatio(event.target.value as AspectRatio)}
+                            disabled={isBusy}
+                            className="block h-11 w-full rounded-lg border border-line-strong bg-raised px-3 text-base text-ink hover:border-muted focus:border-ink focus:outline-none focus:ring-[3px] focus:ring-action/35 disabled:opacity-50"
+                        >
+                            <option value="VERTICAL_9_16">Vertical 9:16</option>
+                            <option value="LANDSCAPE_16_9">Landscape 16:9</option>
+                            <option value="SQUARE_1_1">Square 1:1</option>
+                        </select>
+                    </label>
 
-                        <label className="block">
-                            <span className="mb-2 block text-xs font-semibold text-slate-300">
-                                Caption style
-                            </span>
-                            <select
-                                value={captionStyle}
-                                onChange={(event) =>
-                                    setCaptionStyle(
-                                        event.target.value as CaptionStyle,
-                                    )
-                                }
-                                disabled={isBusy}
-                                className="block w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2.5 text-xs text-slate-100 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400 disabled:opacity-50"
-                            >
-                                <option value="KARAOKE">Karaoke</option>
-                                <option value="HIGHLIGHT">
-                                    Highlight (Hormozi Style)
-                                </option>
-                                <option value="MINIMAL">Minimal</option>
-                                {mode === "CLIP" && (
-                                    <option value="NONE">None</option>
-                                )}
-                            </select>
-                        </label>
+                    <div>
+                        <div className="mb-2 flex items-baseline justify-between gap-3">
+                            <span id="caption-style-label" className="text-[13px] font-medium text-ink">Caption style</span>
+                            <span className="text-[13px] text-muted">Hover or tap a style to preview it</span>
+                        </div>
+                        <CaptionStylePicker
+                            value={captionStyle}
+                            onChange={setCaptionStyle}
+                            allowNone={mode === "CLIP"}
+                            disabled={isBusy}
+                        />
                     </div>
 
-                    {file && (
-                        <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/90 px-3.5 py-2.5 text-xs">
-                            <span className="truncate font-medium text-slate-200">
-                                Selected: {file.name}
-                            </span>
-                            <span className="ml-2 shrink-0 font-mono text-[11px] text-slate-400">
-                                {(file.size / (1024 * 1024)).toFixed(1)} MB
-                            </span>
-                        </div>
-                    )}
-
-                    <button
-                        type="submit"
-                        disabled={isBusy || !file}
-                        className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-sky-400 px-4 py-3 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-sky-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
-                    >
-                        {isBusy ? (
-                            <>
-                                <span
-                                    className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent"
-                                    aria-hidden="true"
-                                />
-                                Working...
-                            </>
-                        ) : isOutOfCredits && isGuest ? (
-                            "Sign In to Process Video (0 Trial Credits Left)"
-                        ) : (
-                            "Upload & Process (1 Credit)"
-                        )}
-                    </button>
-
-                    {/* Status & Progress Bar */}
-                    <div className="space-y-2">
-                        <div
-                            className={`flex items-center justify-between text-xs ${status === "error"
-                                ? "text-rose-400"
-                                : status === "processing"
-                                    ? "text-emerald-300"
-                                    : "text-slate-400"
-                                }`}
+                    <div className="space-y-3">
+                        <button
+                            type="submit"
+                            disabled={isBusy || !file}
+                            className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-action px-6 text-base font-medium text-action-ink transition hover:bg-action-hover active:translate-y-px active:bg-action-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page disabled:cursor-not-allowed disabled:border disabled:border-line disabled:bg-surface disabled:text-muted"
                         >
-                            <span aria-live="polite" className="truncate pr-4">
-                                {status === "uploading"
-                                    ? loadingMessage
-                                    : status === "error" && errorMessage
-                                        ? errorMessage
-                                        : statusLabels[status]}
-                            </span>
-                            {status === "uploading" && (
-                                <span className="whitespace-nowrap font-mono font-semibold text-sky-400">
-                                    {progress}%
+                            {isBusy ? (
+                                <>
+                                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true" />
+                                    {status === "uploading" ? "Uploading" : "Preparing upload"}
+                                </>
+                            ) : isOutOfCredits && isGuest ? (
+                                "Sign in to make clips"
+                            ) : mode === "CLIP" ? (
+                                "Make clips, 1 credit"
+                            ) : (
+                                "Caption video, 1 credit"
+                            )}
+                        </button>
+
+                        {/* Status */}
+                        <div className="space-y-2">
+                            <div
+                                className={`flex items-center justify-between gap-4 text-sm ${status === "error"
+                                    ? "font-medium text-danger"
+                                    : status === "processing"
+                                        ? "text-success"
+                                        : "text-muted"
+                                    }`}
+                            >
+                                <span aria-live="polite" className="min-w-0">
+                                    {status === "uploading"
+                                        ? loadingMessage
+                                        : status === "error" && errorMessage
+                                            ? errorMessage
+                                            : statusLabels[status]}
                                 </span>
+                                {status === "uploading" && (
+                                    <span className="shrink-0 tabular-nums font-medium text-ink">{progress}%</span>
+                                )}
+                            </div>
+
+                            {status !== "idle" && status !== "error" && (
+                                <div className="h-1 w-full overflow-hidden rounded-full bg-line-strong">
+                                    <div
+                                        className="h-full rounded-full bg-action transition-[width] duration-300 ease-out"
+                                        style={{ width: `${progress}%` }}
+                                    />
+                                </div>
+                            )}
+
+                            {status === "processing" && lastQueuedVideoId && (
+                                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-raised p-4">
+                                    <div>
+                                        <p className="text-sm font-semibold text-ink">Processing started</p>
+                                        <p className="text-sm text-muted">The studio updates as each clip finishes.</p>
+                                    </div>
+                                    <a
+                                        href={`/videos/${lastQueuedVideoId}`}
+                                        className="inline-flex h-10 items-center rounded-lg border border-line-strong bg-raised px-4 text-sm font-medium text-ink transition hover:border-ink hover:bg-surface"
+                                    >
+                                        Open the studio
+                                    </a>
+                                </div>
                             )}
                         </div>
-
-                        {status !== "idle" && status !== "error" && (
-                            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
-                                <div
-                                    className="relative h-full bg-sky-400 transition-all duration-300 ease-out"
-                                    style={{ width: `${progress}%` }}
-                                />
-                            </div>
-                        )}
-
-                        {status === "processing" && lastQueuedVideoId && (
-                            <div className="mt-3 flex items-center justify-between rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3.5 py-2.5 text-xs text-emerald-200">
-                                <span>
-                                    Processing started! Your studio will update
-                                    live.
-                                </span>
-                                <a
-                                    href={`/videos/${lastQueuedVideoId}`}
-                                    className="shrink-0 font-bold text-emerald-300 underline hover:text-white"
-                                >
-                                    Open Studio →
-                                </a>
-                            </div>
-                        )}
                     </div>
                 </form>
             </section>
+
+            <aside aria-label="Preview of the result" className="hidden lg:sticky lg:top-24 lg:block">
+                <OutputPreview
+                    mode={mode}
+                    aspectRatio={aspectRatio}
+                    captionStyle={captionStyle}
+                    fileName={file?.name ?? null}
+                    durationSeconds={fileDuration}
+                />
+            </aside>
+            </div>
 
             {/* AUTH GATE MODAL (Google OAuth + Email/Password) */}
             {isAuthModalOpen && (
@@ -749,20 +819,20 @@ function AuthGateModal({
             role="dialog"
             aria-modal="true"
             aria-labelledby="auth-modal-title"
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
         >
-            <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-100 shadow-2xl">
+            <div className="w-full max-w-md overflow-hidden rounded-xl border border-line bg-raised p-6 text-ink shadow-[0_24px_48px_-24px_rgba(14,20,36,0.4)]">
                 <div className="flex items-start justify-between gap-4">
                     <div>
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/30 bg-sky-400/10 px-2.5 py-0.5 text-[11px] font-semibold text-sky-300">
-                            +10 Bonus Credits
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-action/20 px-2.5 py-0.5 text-[13px] font-medium text-ink">
+                            10 free credits
                         </span>
                         <h2
                             id="auth-modal-title"
-                            className="mt-2 text-lg font-bold text-white"
+                            className="mt-2 font-display text-[22px] font-medium tracking-[-0.02em] text-ink"
                         >
                             {tab === "register"
-                                ? "Create your creator account"
+                                ? "Create your account"
                                 : "Welcome back"}
                         </h2>
                     </div>
@@ -771,7 +841,7 @@ function AuthGateModal({
                         type="button"
                         onClick={onClose}
                         aria-label="Close authentication modal"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted transition hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     >
                         <svg
                             viewBox="0 0 24 24"
@@ -788,7 +858,7 @@ function AuthGateModal({
                 </div>
 
                 {reasonMessage && (
-                    <p className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-xs leading-relaxed text-amber-200">
+                    <p className="mt-3 rounded-lg border border-action/40 bg-action/15 p-3 text-sm leading-relaxed text-ink">
                         {reasonMessage}
                     </p>
                 )}
@@ -798,7 +868,7 @@ function AuthGateModal({
                     type="button"
                     disabled={submitting}
                     onClick={() => void handleGoogleSignIn()}
-                    className="mt-5 flex min-h-[42px] w-full items-center justify-center gap-2.5 rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-xs font-semibold text-white transition hover:border-slate-600 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:opacity-50"
+                    className="mt-5 flex h-11 w-full items-center justify-center gap-2.5 rounded-lg border border-line-strong bg-raised px-4 text-sm font-medium text-ink transition hover:border-line-strong hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
                 >
                     <svg
                         viewBox="0 0 24 24"
@@ -825,14 +895,14 @@ function AuthGateModal({
                     Continue with Google
                 </button>
 
-                <div className="my-4 flex items-center gap-3 text-[11px] uppercase tracking-wider text-slate-500">
-                    <span className="h-px flex-1 bg-slate-800" />
+                <div className="my-4 flex items-center gap-3 text-xs text-muted">
+                    <span className="h-px flex-1 bg-line" />
                     <span>or with email</span>
-                    <span className="h-px flex-1 bg-slate-800" />
+                    <span className="h-px flex-1 bg-line" />
                 </div>
 
                 {/* Mode Switcher */}
-                <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-slate-800 bg-slate-950 p-1">
+                <div className="mb-4 grid grid-cols-2 gap-0.5 rounded-lg border border-line bg-surface p-[3px]">
                     <button
                         type="button"
                         onClick={() => {
@@ -840,8 +910,8 @@ function AuthGateModal({
                             setFormError(null);
                         }}
                         className={`rounded-lg py-1.5 text-xs font-semibold transition ${tab === "register"
-                            ? "bg-slate-800 text-white"
-                            : "text-slate-400 hover:text-slate-200"
+                            ? "bg-surface text-ink"
+                            : "text-muted hover:text-ink"
                             }`}
                     >
                         Create Account
@@ -853,8 +923,8 @@ function AuthGateModal({
                             setFormError(null);
                         }}
                         className={`rounded-lg py-1.5 text-xs font-semibold transition ${tab === "login"
-                            ? "bg-slate-800 text-white"
-                            : "text-slate-400 hover:text-slate-200"
+                            ? "bg-surface text-ink"
+                            : "text-muted hover:text-ink"
                             }`}
                     >
                         Sign In
@@ -865,7 +935,7 @@ function AuthGateModal({
                     {formError && (
                         <p
                             role="alert"
-                            className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs font-medium text-rose-300"
+                            className="rounded-xl border border-danger/30 bg-danger/10 p-2.5 text-xs font-medium text-danger"
                         >
                             {formError}
                         </p>
@@ -873,7 +943,7 @@ function AuthGateModal({
 
                     {tab === "register" && (
                         <label className="block">
-                            <span className="mb-1 block text-xs font-semibold text-slate-300">
+                            <span className="mb-1.5 block text-[13px] font-medium text-ink">
                                 Name
                             </span>
                             <input
@@ -883,13 +953,13 @@ function AuthGateModal({
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 placeholder="Your creator name"
-                                className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                className="block h-11 w-full rounded-lg border border-line-strong bg-raised px-3 text-base text-ink placeholder:text-muted hover:border-muted focus:border-ink focus:outline-none focus:ring-[3px] focus:ring-action/35"
                             />
                         </label>
                     )}
 
                     <label className="block">
-                        <span className="mb-1 block text-xs font-semibold text-slate-300">
+                        <span className="mb-1.5 block text-[13px] font-medium text-ink">
                             Email address
                         </span>
                         <input
@@ -898,12 +968,12 @@ function AuthGateModal({
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             placeholder="you@example.com"
-                            className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                            className="block h-11 w-full rounded-lg border border-line-strong bg-raised px-3 text-base text-ink placeholder:text-muted hover:border-muted focus:border-ink focus:outline-none focus:ring-[3px] focus:ring-action/35"
                         />
                     </label>
 
                     <label className="block">
-                        <span className="mb-1 block text-xs font-semibold text-slate-300">
+                        <span className="mb-1.5 block text-[13px] font-medium text-ink">
                             Password
                         </span>
                         <input
@@ -913,17 +983,17 @@ function AuthGateModal({
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             placeholder="At least 6 characters"
-                            className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                            className="block h-11 w-full rounded-lg border border-line-strong bg-raised px-3 text-base text-ink placeholder:text-muted hover:border-muted focus:border-ink focus:outline-none focus:ring-[3px] focus:ring-action/35"
                         />
                     </label>
 
                     <button
                         type="submit"
                         disabled={submitting}
-                        className="mt-2 flex min-h-[42px] w-full items-center justify-center rounded-xl bg-sky-400 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-sky-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:opacity-50"
+                        className="mt-2 flex h-11 w-full items-center justify-center rounded-lg bg-action px-4 text-base font-medium text-action-ink active:translate-y-px transition hover:bg-action-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
                     >
                         {submitting
-                            ? "Please wait..."
+                            ? "Signing you in"
                             : tab === "register"
                                 ? "Create Account & Claim 10 Credits"
                                 : "Sign In"}

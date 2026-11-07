@@ -78,23 +78,23 @@ export default function AuthGateModal({
         <div
             role="dialog"
             aria-modal="true"
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-overlay p-4"
         >
-            <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-800 bg-[#11151F] p-6 text-slate-100 shadow-2xl">
+            <div className="w-full max-w-md overflow-hidden rounded-xl border border-line bg-raised p-6 text-ink shadow-[0_24px_48px_-24px_rgba(14,20,36,0.4)]">
                 <div className="flex items-start justify-between gap-4">
                     <div>
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/30 bg-sky-400/10 px-2.5 py-0.5 text-[11px] font-semibold text-sky-300">
-                            +10 Bonus Credits
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-action/20 px-2.5 py-0.5 text-[13px] font-medium text-ink">
+                            10 free credits
                         </span>
-                        <h2 className="mt-2 text-lg font-bold text-white">
-                            {tab === "register" ? "Create your creator account" : "Welcome back"}
+                        <h2 className="mt-2 font-display text-[22px] font-medium tracking-[-0.02em] text-ink">
+                            {tab === "register" ? "Create your account" : "Welcome back"}
                         </h2>
                     </div>
 
                     <button
                         type="button"
                         onClick={onClose}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted transition hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className="h-4 w-4">
                             <line x1="18" y1="6" x2="6" y2="18" />
@@ -104,7 +104,7 @@ export default function AuthGateModal({
                 </div>
 
                 {reasonMessage && (
-                    <p className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-xs leading-relaxed text-amber-200">
+                    <p className="mt-3 rounded-lg border border-action/40 bg-action/15 p-3 text-sm leading-relaxed text-ink">
                         {reasonMessage}
                     </p>
                 )}
@@ -113,7 +113,7 @@ export default function AuthGateModal({
                     type="button"
                     disabled={submitting}
                     onClick={() => void handleGoogleSignIn()}
-                    className="mt-5 flex min-h-[42px] w-full items-center justify-center gap-2.5 rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-xs font-semibold text-white transition hover:border-slate-600 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:opacity-50"
+                    className="mt-5 flex h-11 w-full items-center justify-center gap-2.5 rounded-lg border border-line-strong bg-raised px-4 text-sm font-medium text-ink transition hover:border-line-strong hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
                 >
                     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
                         <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.8C6.2 7.2 8.9 5 12 5z" />
@@ -124,35 +124,35 @@ export default function AuthGateModal({
                     Continue with Google
                 </button>
 
-                <div className="my-4 flex items-center gap-3 text-[11px] uppercase tracking-wider text-slate-500">
-                    <span className="h-px flex-1 bg-slate-800" />
+                <div className="my-4 flex items-center gap-3 text-xs text-muted">
+                    <span className="h-px flex-1 bg-line" />
                     <span>or with email</span>
-                    <span className="h-px flex-1 bg-slate-800" />
+                    <span className="h-px flex-1 bg-line" />
                 </div>
 
-                <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-slate-800 bg-slate-950 p-1">
-                    <button type="button" onClick={() => { setTab("register"); setFormError(null); }} className={`rounded-lg py-1.5 text-xs font-semibold transition ${tab === "register" ? "bg-slate-800 text-white" : "text-slate-400 hover:text-slate-200"}`}>Create Account</button>
-                    <button type="button" onClick={() => { setTab("login"); setFormError(null); }} className={`rounded-lg py-1.5 text-xs font-semibold transition ${tab === "login" ? "bg-slate-800 text-white" : "text-slate-400 hover:text-slate-200"}`}>Sign In</button>
+                <div className="mb-4 grid grid-cols-2 gap-0.5 rounded-lg border border-line bg-surface p-[3px]">
+                    <button type="button" onClick={() => { setTab("register"); setFormError(null); }} className={`h-9 rounded-md text-sm font-medium transition ${tab === "register" ? "bg-raised text-ink shadow-[0_0_0_1px_var(--sm-line-strong)]" : "text-muted hover:text-ink"}`}>Create account</button>
+                    <button type="button" onClick={() => { setTab("login"); setFormError(null); }} className={`h-9 rounded-md text-sm font-medium transition ${tab === "login" ? "bg-raised text-ink shadow-[0_0_0_1px_var(--sm-line-strong)]" : "text-muted hover:text-ink"}`}>Sign in</button>
                 </div>
 
                 <form onSubmit={handleCredentialsSubmit} className="space-y-3.5">
-                    {formError && <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs font-medium text-rose-300">{formError}</p>}
+                    {formError && <p role="alert" className="rounded-xl border border-danger/30 bg-danger/10 p-2.5 text-xs font-medium text-danger">{formError}</p>}
                     {tab === "register" && (
                         <label className="block">
-                            <span className="mb-1 block text-xs font-semibold text-slate-300">Name</span>
-                            <input type="text" required minLength={2} value={name} onChange={(e) => setName(e.target.value)} placeholder="Your creator name" className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400" />
+                            <span className="mb-1.5 block text-[13px] font-medium text-ink">Name</span>
+                            <input type="text" required minLength={2} value={name} onChange={(e) => setName(e.target.value)} placeholder="Your creator name" className="block h-11 w-full rounded-lg border border-line-strong bg-raised px-3 text-base text-ink placeholder:text-muted hover:border-muted focus:border-ink focus:outline-none focus:ring-[3px] focus:ring-action/35" />
                         </label>
                     )}
                     <label className="block">
-                        <span className="mb-1 block text-xs font-semibold text-slate-300">Email address</span>
-                        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400" />
+                        <span className="mb-1.5 block text-[13px] font-medium text-ink">Email address</span>
+                        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="block h-11 w-full rounded-lg border border-line-strong bg-raised px-3 text-base text-ink placeholder:text-muted hover:border-muted focus:border-ink focus:outline-none focus:ring-[3px] focus:ring-action/35" />
                     </label>
                     <label className="block">
-                        <span className="mb-1 block text-xs font-semibold text-slate-300">Password</span>
-                        <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" className="block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400" />
+                        <span className="mb-1.5 block text-[13px] font-medium text-ink">Password</span>
+                        <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" className="block h-11 w-full rounded-lg border border-line-strong bg-raised px-3 text-base text-ink placeholder:text-muted hover:border-muted focus:border-ink focus:outline-none focus:ring-[3px] focus:ring-action/35" />
                     </label>
-                    <button type="submit" disabled={submitting} className="mt-2 flex min-h-[42px] w-full items-center justify-center rounded-xl bg-sky-400 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-sky-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:opacity-50">
-                        {submitting ? "Please wait..." : tab === "register" ? "Create Account & Claim 10 Credits" : "Sign In"}
+                    <button type="submit" disabled={submitting} className="mt-2 flex h-11 w-full items-center justify-center rounded-lg bg-action px-4 text-base font-medium text-action-ink active:translate-y-px transition hover:bg-action-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
+                        {submitting ? "Signing you in" : tab === "register" ? "Create account and get 10 credits" : "Sign in"}
                     </button>
                 </form>
             </div>

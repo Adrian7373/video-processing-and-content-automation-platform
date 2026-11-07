@@ -1,7 +1,7 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { prisma } from "../../../../../packages/database/index";
-import { getOrCreateActor } from "@/lib/auth";
+import { getExistingActor } from "@/lib/auth";
 import VideosLibrary, { type VideoCard } from "./VideosLibrary";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,12 @@ export default async function VideosPage({
 }: {
     searchParams: Promise<{ page?: string }>;
 }) {
-    const actor = await getOrCreateActor();
+    // First-time visitors have no guest cookie yet; show the empty page
+    // instead of creating one here (Server Components cannot set cookies).
+    const actor = (await getExistingActor()) ?? {
+        userId: "00000000-0000-0000-0000-000000000000",
+        isAnonymous: true,
+    };
 
     // Await and parse the page parameter (default to page 1)
     const resolvedParams = await searchParams;
@@ -56,6 +61,8 @@ export default async function VideosPage({
             _count: { select: { segments: true } },
             segments: {
                 take: 1,
+                // Thumbnails are best-effort in the worker; skip clips without one.
+                where: { thumbnailS3Key: { not: null } },
                 orderBy: { startTime: "asc" },
                 select: {
                     thumbnailS3Key: true,

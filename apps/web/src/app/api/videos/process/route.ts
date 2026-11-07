@@ -6,11 +6,17 @@ import {
     CreditReason,
     prisma,
 } from "../../../../../../../packages/database/index";
+import { MAX_UPLOAD_FILE_SIZE_BYTES } from "../../../../../../../packages/database/uploadLimits";
 import {
-    mediaProcessingQueue,
-    PROCESS_VIDEO_JOB,
+    buildVideoProcessingJobId,
+    failVideoAndRefund,
+} from "../../../../../../../packages/database/videoLifecycle";
+import {
+    enqueueVideoProcessing,
+    wakeWorker,
     type MediaProcessingJobData,
 } from "@/lib/queues";
+import { checkUploadedObject } from "@/lib/s3";
 import { getOrCreateActor } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +24,7 @@ export const dynamic = "force-dynamic";
 const videoProcessingJobSchema = z.object({
     s3Key: z.string().min(1),
     videoId: z.string().uuid(),
+    // Accepted for backwards compatibility but never trusted: the actor is resolved server-side.
     userId: z.string().min(1).optional(),
     userPrompt: z.string().trim().max(1000).optional(),
     processingMode: z.enum(["CLIP", "CAPTION_ONLY"]).default("CLIP"),
@@ -30,6 +37,27 @@ class InsufficientCreditsError extends Error {
         super("INSUFFICIENT_CREDITS");
         this.name = "InsufficientCreditsError";
     }
+}
+
+class VideoAlreadyQueuedError extends Error {
+    constructor() {
+        super("VIDEO_ALREADY_QUEUED");
+        this.name = "VideoAlreadyQueuedError";
+    }
+}
+
+function outOfCreditsResponse(isAnonymous: boolean) {
+    return NextResponse.json(
+        {
+            error: isAnonymous
+                ? "You have used all 3 free trial credits. Sign in or create an account to unlock 10 more credits."
+                : "You have 0 credits remaining.",
+            code: isAnonymous ? "TRIAL_CREDITS_EXHAUSTED" : "INSUFFICIENT_CREDITS",
+            requiresAuth: isAnonymous,
+            creditsRemaining: 0,
+        },
+        { status: 402 },
+    );
 }
 
 export async function POST(request: Request) {
@@ -53,10 +81,12 @@ export async function POST(request: Request) {
     }
 
     const requestData = parsedBody.data;
-    let deductedUserId: string | null = null;
+    let isAnonymous = true;
+    let queuedJobId: string | null = null;
 
     try {
         const actor = await getOrCreateActor();
+        isAnonymous = actor.isAnonymous;
 
         const video = await prisma.video.findUnique({
             where: { id: requestData.videoId },
@@ -83,6 +113,21 @@ export async function POST(request: Request) {
             );
         }
 
+        // Never charge for, or queue, an upload that did not reach storage.
+        const uploaded = await checkUploadedObject(video.s3Key, MAX_UPLOAD_FILE_SIZE_BYTES);
+        if (!uploaded.ok) {
+            const message =
+                uploaded.reason === "missing"
+                    ? "The upload did not finish. Please upload the video again."
+                    : uploaded.reason === "empty"
+                        ? "The uploaded video file is empty."
+                        : "Video files must not exceed 300 MB.";
+            return NextResponse.json(
+                { error: message, code: `UPLOAD_${uploaded.reason.toUpperCase()}` },
+                { status: uploaded.reason === "missing" ? 409 : 400 },
+            );
+        }
+
         const resolvedPrompt =
             requestData.processingMode === "CAPTION_ONLY"
                 ? "[CAPTION_ONLY]"
@@ -97,19 +142,36 @@ export async function POST(request: Request) {
             aspectRatio: requestData.aspectRatio ?? video.aspectRatio,
             captionStyle: requestData.captionStyle ?? video.captionStyle,
         };
+        const jobId = buildVideoProcessingJobId(video.id);
 
-        // Atomic credit deduction + video status update
+        // Atomic: claim UPLOADING -> QUEUED (blocks double-submits), deduct
+        // the credit, and record the job ID before the job exists.
         const updatedCredits = await prisma.$transaction(async (tx) => {
-            const deducted = await tx.user.updateMany({
-                where: {
-                    id: actor.userId,
-                    credits: { gte: 1 },
-                },
+            const claimed = await tx.video.updateMany({
+                where: { id: video.id, userId: actor.userId, status: "UPLOADING" },
                 data: {
-                    credits: { decrement: 1 },
+                    status: "QUEUED",
+                    errorMessage: null,
+                    errorCode: null,
+                    failedAt: null,
+                    completedAt: null,
+                    processingStartedAt: null,
+                    processingAttempt: 0,
+                    bullMqJobId: jobId,
+                    lastHeartbeatAt: new Date(),
+                    userPrompt: jobData.userPrompt ?? null,
+                    aspectRatio: jobData.aspectRatio,
+                    captionStyle: jobData.captionStyle,
                 },
             });
+            if (claimed.count === 0) {
+                throw new VideoAlreadyQueuedError();
+            }
 
+            const deducted = await tx.user.updateMany({
+                where: { id: actor.userId, credits: { gte: 1 } },
+                data: { credits: { decrement: 1 } },
+            });
             if (deducted.count === 0) {
                 throw new InsufficientCreditsError();
             }
@@ -123,62 +185,20 @@ export async function POST(request: Request) {
                 },
             });
 
-            await tx.video.update({
-                where: { id: video.id },
-                data: {
-                    status: "QUEUED",
-                    errorMessage: null,
-                    errorCode: null,
-                    processingAttempt: 0,
-                    bullMqJobId: null,
-                    lastHeartbeatAt: new Date(),
-                    userPrompt: jobData.userPrompt ?? null,
-                    aspectRatio: jobData.aspectRatio,
-                    captionStyle: jobData.captionStyle,
-                },
-            });
-
             const refreshedUser = await tx.user.findUnique({
                 where: { id: actor.userId },
                 select: { credits: true },
             });
-
             return refreshedUser?.credits ?? 0;
         });
 
-        deductedUserId = actor.userId;
-
-        const job = await mediaProcessingQueue.add(PROCESS_VIDEO_JOB, jobData, {
-            attempts: 3,
-            backoff: { type: "exponential", delay: 5000 },
-            removeOnComplete: 100,
-        });
-        await prisma.video.updateMany({
-            where: { id: video.id, status: "QUEUED" },
-            data: { bullMqJobId: String(job.id), lastHeartbeatAt: new Date() },
-        });
-
-        const workerWakeUrl = (
-            process.env.WORKER_PUBLIC_URL ||
-            "https://scroll-maestro-worker.onrender.com"
-        ).replace(/\/$/, "");
-
-        try {
-            await fetch(`${workerWakeUrl}/health`, {
-                method: "GET",
-                headers: {
-                    "User-Agent": "Mozilla/5.0 (compatible; ScrollMaestro-Wake/1.0)",
-                    "Cache-Control": "no-cache",
-                },
-                signal: AbortSignal.timeout(3000),
-            });
-        } catch {
-            // Expected to timeout if Render is cold-booting (~40s); the inbound HTTP request alone triggers Render to spin up the container.
-        }
+        queuedJobId = jobId;
+        await enqueueVideoProcessing(jobData, jobId);
+        await wakeWorker();
 
         return NextResponse.json(
             {
-                jobId: job.id,
+                jobId,
                 queued: true,
                 creditsRemaining: updatedCredits,
                 isAnonymous: actor.isAnonymous,
@@ -187,62 +207,28 @@ export async function POST(request: Request) {
         );
     } catch (error) {
         if (error instanceof InsufficientCreditsError) {
-            const actor = await getOrCreateActor().catch(() => null);
-            const isAnon = actor?.isAnonymous ?? true;
+            return outOfCreditsResponse(isAnonymous);
+        }
+        if (error instanceof VideoAlreadyQueuedError) {
             return NextResponse.json(
-                {
-                    error: isAnon
-                        ? "You have used all 3 free trial credits. Sign in or create an account to unlock 10 more credits."
-                        : "You have 0 credits remaining.",
-                    code: isAnon
-                        ? "TRIAL_CREDITS_EXHAUSTED"
-                        : "INSUFFICIENT_CREDITS",
-                    requiresAuth: isAnon,
-                    creditsRemaining: 0,
-                },
-                { status: 402 },
+                { error: "This video is already being processed." },
+                { status: 409 },
             );
         }
 
         console.error("Failed to enqueue media-processing job.", error);
 
-        // Refund credit & mark video FAILED if queue submission failed after DB deduction
-        if (deductedUserId) {
-            const userIdToRefund = deductedUserId;
-            await prisma
-                .$transaction([
-                    prisma.user.update({
-                        where: { id: userIdToRefund },
-                        data: { credits: { increment: 1 } },
-                    }),
-                    prisma.creditTransaction.create({
-                        data: {
-                            userId: userIdToRefund,
-                            amount: 1,
-                            reason: CreditReason.REFUND_FAILED_JOB,
-                            videoId: requestData.videoId,
-                        },
-                    }),
-                    prisma.video.update({
-                        where: { id: requestData.videoId },
-                        data: {
-                            status: "FAILED",
-                            errorCode: "QUEUE_SUBMISSION_FAILED",
-                            failedAt: new Date(),
-                            lastHeartbeatAt: null,
-                            errorMessage:
-                                error instanceof Error
-                                    ? error.message
-                                    : "Unable to queue video processing.",
-                        },
-                    }),
-                ])
-                .catch((refundError: unknown) => {
-                    console.error(
-                        "Failed to refund credit after queue failure.",
-                        refundError,
-                    );
-                });
+        // The credit was charged but the job never reached Redis: refund it
+        // (idempotent and scoped to this job ID).
+        if (queuedJobId) {
+            await failVideoAndRefund(prisma, {
+                videoId: requestData.videoId,
+                jobId: queuedJobId,
+                error,
+                errorCode: "QUEUE_SUBMISSION_FAILED",
+            }).catch((refundError: unknown) => {
+                console.error("Failed to refund credit after queue failure.", refundError);
+            });
         }
 
         return NextResponse.json(

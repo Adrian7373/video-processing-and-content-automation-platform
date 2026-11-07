@@ -56,10 +56,18 @@ export default function HomeClient({
             const response = await fetch(`/api/videos/${videoId}/retry`, {
                 method: "POST",
             });
-            if (!response.ok) throw new Error("Retry failed.");
+            if (!response.ok) {
+                const payload = (await response.json().catch(() => ({}))) as {
+                    error?: string;
+                };
+                throw new Error(payload.error ?? "Retry failed. Please try again.");
+            }
             router.refresh();
         } catch (error) {
             console.error("Unable to retry video.", error);
+            window.alert(
+                error instanceof Error ? error.message : "Retry failed. Please try again.",
+            );
         } finally {
             setRetrying(null);
         }
@@ -80,7 +88,7 @@ export default function HomeClient({
     // STATE 2: HAS PROJECTS
     // Strict 2-column layout preventing the Uploader from overlapping the grid
     return (
-        <div className="min-h-full w-full bg-slate-950 p-6 lg:p-8 xl:p-10">
+        <div className="min-h-full w-full bg-page p-6 lg:p-8 xl:p-10">
             {/* max-w-[1400px] ensures it doesn't stretch awkwardly on ultra-wide screens */}
             <div className="mx-auto max-w-[1400px]">
 
@@ -95,13 +103,13 @@ export default function HomeClient({
                     {/* RIGHT COLUMN: Recent Projects Grid */}
                     <div className="flex-1 min-w-0">
                         {/* Header constrained strictly inside the right column */}
-                        <div className="mb-6 flex items-center justify-between border-b border-slate-800/80 pb-3">
-                            <h2 className="text-base font-semibold text-slate-200">
+                        <div className="mb-6 flex items-center justify-between border-b border-line pb-3">
+                            <h2 className="text-base font-semibold text-ink">
                                 Recent Projects
                             </h2>
                             <Link
                                 href="/videos"
-                                className="text-sm font-medium text-sky-400 transition hover:text-sky-300 focus-visible:outline-none focus-visible:underline"
+                                className="text-sm font-medium text-link transition hover:text-link focus-visible:outline-none focus-visible:underline"
                             >
                                 View all &rarr;
                             </Link>
@@ -140,8 +148,8 @@ export default function HomeClient({
                                                     router.push(`/videos/${video.id}`);
                                                 }
                                             }}
-                                            className={`relative aspect-video w-full overflow-hidden rounded-2xl border border-slate-800/90 bg-[#0E111A] transition duration-200 ${isCompleted
-                                                    ? "cursor-pointer hover:border-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                                            className={`relative aspect-video w-full overflow-hidden rounded-xl border border-line bg-raised transition duration-200 ${isCompleted
+                                                    ? "cursor-pointer hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                                                     : "cursor-default"
                                                 }`}
                                         >
@@ -162,12 +170,12 @@ export default function HomeClient({
                                                     />
                                                 </>
                                             ) : (
-                                                <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-slate-900/80 to-slate-950">
-                                                    <div className="flex h-36 w-20 flex-col items-center justify-center rounded-lg border border-slate-800/90 bg-slate-900/90 shadow-inner">
+                                                <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-raised/80 to-page">
+                                                    <div className="flex h-36 w-20 flex-col items-center justify-center rounded-lg border border-line bg-raised/90 shadow-inner">
                                                         {isProcessing ? (
-                                                            <span className="h-5 w-5 animate-spin rounded-full border-2 border-sky-400 border-t-transparent" aria-hidden="true" />
+                                                            <span className="h-5 w-5 animate-spin rounded-full border-2 border-action border-t-transparent" aria-hidden="true" />
                                                         ) : (
-                                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" className="h-6 w-6 text-slate-500">
+                                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" className="h-6 w-6 text-muted">
                                                                 <polygon points="5 3 19 12 5 21 5 3" />
                                                             </svg>
                                                         )}
@@ -177,8 +185,8 @@ export default function HomeClient({
 
                                             {/* Status Overlays */}
                                             {isProcessing && (
-                                                <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-2 bg-slate-950/90 px-3 py-1.5 text-xs font-medium text-amber-300 backdrop-blur-sm">
-                                                    <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" aria-hidden="true" />
+                                                <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-2 bg-page/90 px-3 py-1.5 text-xs font-medium text-link">
+                                                    <span className="h-2 w-2 animate-pulse rounded-full bg-action" aria-hidden="true" />
                                                     <span>
                                                         {video.status === "UPLOADING"
                                                             ? "Uploading video..."
@@ -190,15 +198,15 @@ export default function HomeClient({
                                             )}
 
                                             {isFailed && (
-                                                <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between gap-2 bg-slate-950/95 px-3 py-1.5 text-xs backdrop-blur-sm">
-                                                    <span className="truncate font-medium text-rose-400" title={video.errorMessage ?? "Processing failed"}>
+                                                <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between gap-2 bg-page/95 px-3 py-1.5 text-xs">
+                                                    <span className="truncate font-medium text-danger" title={video.errorMessage ?? "Processing failed"}>
                                                         Processing failed
                                                     </span>
                                                     <button
                                                         type="button"
                                                         onClick={(e) => void retry(e, video.id)}
                                                         disabled={retrying === video.id}
-                                                        className="shrink-0 rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-950 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:opacity-50"
+                                                        className="shrink-0 rounded-md bg-ink px-2.5 py-1 text-xs font-semibold text-page transition hover:bg-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
                                                     >
                                                         {retrying === video.id ? "Retrying..." : "Retry"}
                                                     </button>
@@ -208,9 +216,9 @@ export default function HomeClient({
 
                                         {/* Metadata */}
                                         <div className="mt-3 flex items-start justify-between gap-2 px-0.5">
-                                            <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug text-slate-100">
+                                            <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug text-ink">
                                                 {isCompleted ? (
-                                                    <Link href={`/videos/${video.id}`} className="hover:text-sky-400 focus-visible:outline-none focus-visible:underline" title={displayTitle}>
+                                                    <Link href={`/videos/${video.id}`} className="hover:text-link focus-visible:outline-none focus-visible:underline" title={displayTitle}>
                                                         {displayTitle}
                                                     </Link>
                                                 ) : (
@@ -219,9 +227,9 @@ export default function HomeClient({
                                             </h2>
                                         </div>
 
-                                        <div className="mt-1 flex items-center gap-2 px-0.5 text-[11px] text-slate-400 tabular-nums">
+                                        <div className="mt-1 flex items-center gap-2 px-0.5 text-xs text-muted tabular-nums">
                                             <span>{clipCount} {clipCount === 1 ? "clip" : "clips"}</span>
-                                            <span aria-hidden="true" className="text-slate-700">|</span>
+                                            <span aria-hidden="true" className="text-muted">|</span>
                                             <span>{formattedDate}</span>
                                         </div>
                                     </article>

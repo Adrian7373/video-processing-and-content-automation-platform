@@ -1,50 +1,133 @@
 @import "tailwindcss";
 
+/*
+ * Scroll Maestro design system: global tokens.
+ * Reference page: /designsystem (src/app/designsystem).
+ * Theme: <html data-theme="light|dark|system">, set before paint by the
+ * script in layout.tsx and switched with the theme control in the sidebar.
+ */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, [data-theme="system"].system-dark, [data-theme="system"].system-dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --sm-page: #ffffff;
+  --sm-surface: #f4f4f2;
+  --sm-raised: #ffffff;
+  --sm-sunken: #ecebe7;
+  --sm-ink: #1f2b4d;
+  --sm-muted: #646b81;
+  --sm-line: rgba(31, 43, 77, 0.13);
+  --sm-line-strong: rgba(31, 43, 77, 0.24);
+  --sm-action: #f7941d;
+  --sm-action-hover: #ffa53a;
+  --sm-action-press: #e07f0a;
+  --sm-action-ink: #1f2b4d;
+  --sm-link: #a65300;
+  --sm-focus: #1f2b4d;
+  --sm-success: #1b7f52;
+  --sm-danger: #c2303a;
+  --sm-info: #2e57c9;
+  --sm-overlay: rgba(14, 20, 36, 0.45);
+  --sm-frame: #1f2b4d;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"],
+:root[data-theme="system"].system-dark {
+  --sm-page: #0e1424;
+  --sm-surface: #151d33;
+  --sm-raised: #1a2440;
+  --sm-sunken: #0a0f1c;
+  --sm-ink: #eef0f6;
+  --sm-muted: #a3aac0;
+  --sm-line: rgba(238, 240, 246, 0.1);
+  --sm-line-strong: rgba(238, 240, 246, 0.2);
+  --sm-link: #ffb25e;
+  --sm-focus: #f7941d;
+  --sm-success: #4cc38a;
+  --sm-danger: #ff7c82;
+  --sm-info: #8eaeff;
+  --sm-overlay: rgba(5, 8, 15, 0.7);
+  --sm-frame: #05080f;
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-page: var(--sm-page);
+  --color-surface: var(--sm-surface);
+  --color-raised: var(--sm-raised);
+  --color-sunken: var(--sm-sunken);
+  --color-ink: var(--sm-ink);
+  --color-muted: var(--sm-muted);
+  --color-line: var(--sm-line);
+  --color-line-strong: var(--sm-line-strong);
+  --color-action: var(--sm-action);
+  --color-action-hover: var(--sm-action-hover);
+  --color-action-press: var(--sm-action-press);
+  --color-action-ink: var(--sm-action-ink);
+  --color-link: var(--sm-link);
+  --color-focus: var(--sm-focus);
+  --color-success: var(--sm-success);
+  --color-danger: var(--sm-danger);
+  --color-info: var(--sm-info);
+  --color-overlay: var(--sm-overlay);
+  --color-frame: var(--sm-frame);
+
+  --font-sans: var(--ds-font-text), system-ui, sans-serif;
+  --font-display: var(--ds-font-display), system-ui, sans-serif;
+  --font-mono: var(--ds-font-mono), ui-monospace, Menlo, Consolas, monospace;
+
+  /* Nothing in the interface is smaller than 13px. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.4;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--sm-page);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--sm-page);
+  color: var(--sm-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--sm-action) 30%, transparent);
+}
+
+:focus-visible {
+  outline-color: var(--sm-focus);
 }
 
 .legal-content h2 {
   margin-top: 2.5rem;
-  color: #f8fafc;
-  font-size: 1.25rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  color: var(--sm-ink);
+  font-size: 1.375rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
 
 .legal-content h3 {
   margin-top: 1.75rem;
-  color: #e2e8f0;
-  font-size: 1rem;
+  color: var(--sm-ink);
+  font-size: 1.0625rem;
   font-weight: 600;
 }
 
 .legal-content p {
   margin-top: 1rem;
-  color: #94a3b8;
-  font-size: 0.9375rem;
-  line-height: 1.8;
+  color: var(--sm-muted);
+  font-size: 1rem;
+  line-height: 1.75;
 }
 
 .legal-content ul {
@@ -55,23 +138,54 @@ body {
 
 .legal-content li {
   margin-top: 0.625rem;
-  color: #94a3b8;
-  font-size: 0.9375rem;
-  line-height: 1.75;
+  color: var(--sm-muted);
+  font-size: 1rem;
+  line-height: 1.7;
 }
 
 .legal-content strong {
-  color: #e2e8f0;
+  color: var(--sm-ink);
   font-weight: 600;
 }
 
 .legal-content a {
-  color: #7dd3fc;
+  color: var(--sm-link);
   text-decoration: underline;
-  text-decoration-color: rgb(56 189 248 / 0.35);
+  text-decoration-color: color-mix(in srgb, var(--sm-link) 40%, transparent);
   text-underline-offset: 3px;
 }
 
 .legal-content a:hover {
-  color: #bae6fd;
+  text-decoration-color: var(--sm-link);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@keyframes sm-caption-pop {
+  0% {
+    transform: scale(0.72);
+  }
+  60% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes sm-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
 }

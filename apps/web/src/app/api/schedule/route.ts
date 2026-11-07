@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-    prisma,
-    SocialPlatform,
-} from "../../../../../../packages/database/index";
+import { prisma } from "../../../../../../packages/database/index";
 import {
     PUBLISH_SOCIAL_POST_JOB,
     socialPublishingQueue,
@@ -25,63 +22,10 @@ const schedulePostRequestSchema = z.object({
         }),
 });
 
-const DEMO_ACCOUNT_MAP: Record<
-    string,
-    {
-        platform: SocialPlatform;
-        accountName: string;
-        platformAccountId: string;
-    }
-> = {
-    "demo-yt": {
-        platform: SocialPlatform.YOUTUBE_SHORTS,
-        accountName: "YouTube Shorts",
-        platformAccountId: "demo_youtube_shorts",
-    },
-    "demo-tt": {
-        platform: SocialPlatform.TIKTOK,
-        accountName: "TikTok Creator",
-        platformAccountId: "demo_tiktok_creator",
-    },
-    "demo-ig": {
-        platform: SocialPlatform.INSTAGRAM_REELS,
-        accountName: "Instagram Reels",
-        platformAccountId: "demo_instagram_reels",
-    },
-    "demo-fb": {
-        platform: SocialPlatform.FACEBOOK_REELS,
-        accountName: "Facebook Reels",
-        platformAccountId: "demo_facebook_reels",
-    },
-};
-
 async function resolveOrCreateAccountId(
     rawAccountId: string,
     userId: string,
 ): Promise<string | null> {
-    const demoConfig = DEMO_ACCOUNT_MAP[rawAccountId];
-    if (demoConfig) {
-        const upserted = await prisma.socialAccount.upsert({
-            where: {
-                userId_platform_platformAccountId: {
-                    userId,
-                    platform: demoConfig.platform,
-                    platformAccountId: demoConfig.platformAccountId,
-                },
-            },
-            update: {},
-            create: {
-                userId,
-                platform: demoConfig.platform,
-                platformAccountId: demoConfig.platformAccountId,
-                accountName: demoConfig.accountName,
-                accessToken: `mock_token_${demoConfig.platform.toLowerCase()}`,
-            },
-            select: { id: true },
-        });
-        return upserted.id;
-    }
-
     const existing = await prisma.socialAccount.findFirst({
         where: {
             id: rawAccountId,
@@ -196,6 +140,12 @@ export async function POST(request: Request) {
 
     try {
         const actor = await getOrCreateActor();
+        if (actor.isAnonymous) {
+            return NextResponse.json(
+                { error: "Sign in and connect a social account before scheduling posts." },
+                { status: 401 },
+            );
+        }
         const segment = await prisma.videoSegment.findFirst({
             where: {
                 id: segmentId,

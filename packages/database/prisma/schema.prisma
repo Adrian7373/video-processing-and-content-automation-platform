@@ -30,6 +30,11 @@ enum CaptionStyle {
   KARAOKE
   HIGHLIGHT
   MINIMAL
+  POP
+  MARKER
+  BOX
+  NEON
+  HEADLINE
 }
 
 enum SocialPlatform {
