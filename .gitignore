@@ -23,3 +23,7 @@ packages/database/generated/
 npm-debug.log*
 postgres_data/
 redis_data/
+
+# local test media
+apps/web/samples/
+apps/worker/.tmp/
