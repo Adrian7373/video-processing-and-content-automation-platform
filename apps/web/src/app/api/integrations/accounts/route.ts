@@ -11,6 +11,8 @@ export interface ConnectedSocialAccountDTO {
     accountName: string;
     platformAccountId: string;
     tokenExpiresAt: string | null;
+    needsReauth: boolean;
+    reauthReason: string | null;
     createdAt: string;
 }
 
@@ -26,6 +28,8 @@ export async function GET() {
                 accountName: true,
                 platformAccountId: true,
                 tokenExpiresAt: true,
+                needsReauth: true,
+                reauthReason: true,
                 createdAt: true,
             },
             orderBy: { createdAt: "desc" },
@@ -37,6 +41,8 @@ export async function GET() {
             accountName: acc.accountName,
             platformAccountId: acc.platformAccountId,
             tokenExpiresAt: acc.tokenExpiresAt ? acc.tokenExpiresAt.toISOString() : null,
+            needsReauth: acc.needsReauth,
+            reauthReason: acc.reauthReason,
             createdAt: acc.createdAt.toISOString(),
         }));
 

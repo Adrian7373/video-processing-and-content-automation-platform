@@ -1,7 +1,7 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
-import type { Job } from "bullmq";
+import { UnrecoverableError, type Job } from "bullmq";
 import axios, { isAxiosError } from "axios";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
@@ -134,6 +134,63 @@ function formatPublishError(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
+
+const REAUTH_ERROR_CODES = new Set([
+    "invalid_grant",
+    "invalid_token",
+    "access_token_invalid",
+    "refresh_token_expired",
+    "refresh_token_invalid",
+    "unauthorized_client",
+]);
+
+/**
+ * True when the provider says the stored grant is dead (expired or revoked), so no retry can
+ * succeed until the user signs in again.
+ */
+function isRevokedGrantError(error: unknown): boolean {
+    if (!isAxiosError(error)) return false;
+    const status = error.response?.status;
+    if (status !== 400 && status !== 401) return false;
+    const data = error.response?.data as
+        | { error?: unknown; error_description?: unknown }
+        | undefined;
+    const code = typeof data?.error === "string" ? data.error : "";
+    const description =
+        typeof data?.error_description === "string"
+            ? data.error_description
+            : "";
+    return (
+        REAUTH_ERROR_CODES.has(code) ||
+        /expired or revoked|revoked|refresh token.*(expired|invalid)/i.test(
+            description,
+        )
+    );
+}
+
+/**
+ * Flags the account so the Channels page asks the user to reconnect, and returns a
+ * non-retryable error for BullMQ.
+ */
+async function flagAccountNeedsReauth(
+    accountId: string,
+    platformName: string,
+): Promise<UnrecoverableError> {
+    const reason = `Your ${platformName} connection has expired or was revoked. Reconnect it in Social accounts to keep publishing.`;
+    await prisma.socialAccount
+        .update({
+            where: { id: accountId },
+            data: { needsReauth: true, reauthReason: reason },
+        })
+        .catch((dbError: unknown) => {
+            console.error(
+                `Failed to flag SocialAccount ${accountId} as needing reauth:`,
+                dbError,
+            );
+        });
+    return new UnrecoverableError(reason);
+}
+
 /**
  * Refreshes a Google/YouTube OAuth 2.0 access token using the stored refreshToken
  * and updates the SocialAccount row in Prisma.
@@ -142,9 +199,7 @@ async function refreshYouTubeAccessToken(
     account: Pick<SocialAccountRecord, "id" | "refreshToken">,
 ): Promise<string> {
     if (!account.refreshToken) {
-        throw new Error(
-            "YouTube access token has expired and no refreshToken is stored. Please reconnect your YouTube channel in /channels.",
-        );
+        throw await flagAccountNeedsReauth(account.id, "YouTube");
     }
 
     const clientId =
@@ -162,19 +217,29 @@ async function refreshYouTubeAccessToken(
         `[OAuth Refresh] Refreshing YouTube access token for SocialAccount ${account.id}...`,
     );
 
-    const response = await axios.post<GoogleRefreshTokenResponse>(
-        "https://oauth2.googleapis.com/token",
-        new URLSearchParams({
-            client_id: clientId,
-            client_secret: clientSecret,
-            refresh_token: account.refreshToken,
-            grant_type: "refresh_token",
-        }).toString(),
-        {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            timeout: 30_000,
-        },
-    );
+    let response;
+    try {
+        response = await axios.post<GoogleRefreshTokenResponse>(
+            "https://oauth2.googleapis.com/token",
+            new URLSearchParams({
+                client_id: clientId,
+                client_secret: clientSecret,
+                refresh_token: account.refreshToken,
+                grant_type: "refresh_token",
+            }).toString(),
+            {
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                timeout: 30_000,
+            },
+        );
+    } catch (error) {
+        if (isRevokedGrantError(error)) {
+            throw await flagAccountNeedsReauth(account.id, "YouTube");
+        }
+        throw error;
+    }
 
     const newAccessToken = response.data.access_token;
     const expiresInSeconds = Math.max(60, response.data.expires_in ?? 3600);
@@ -185,6 +250,8 @@ async function refreshYouTubeAccessToken(
         data: {
             accessToken: newAccessToken,
             tokenExpiresAt,
+            needsReauth: false,
+            reauthReason: null,
         },
     });
 
@@ -198,9 +265,7 @@ async function refreshTikTokAccessToken(
     > & Partial<Pick<SocialAccountRecord, "accessToken" | "tokenExpiresAt">>,
 ): Promise<string> {
     if (!account.refreshToken) {
-        throw new Error(
-            "TikTok access token has expired and no refreshToken is stored. Please reconnect your TikTok account in /channels.",
-        );
+        throw await flagAccountNeedsReauth(account.id, "TikTok");
     }
 
     const clientKey = env.TIKTOK_CLIENT_KEY;
@@ -221,16 +286,32 @@ async function refreshTikTokAccessToken(
         grant_type: "refresh_token",
         refresh_token: account.refreshToken,
     });
-    const response = await axios.post(
-        "https://open.tiktokapis.com/v2/oauth/token/",
-        params,
-        {
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
+    let response;
+    try {
+        response = await axios.post(
+            "https://open.tiktokapis.com/v2/oauth/token/",
+            params,
+            {
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                timeout: 30_000,
             },
-            timeout: 30_000,
-        },
-    );
+        );
+    } catch (error) {
+        if (isRevokedGrantError(error)) {
+            throw await flagAccountNeedsReauth(account.id, "TikTok");
+        }
+        throw error;
+    }
+    const tiktokErrorCode = (response.data as { error?: unknown } | undefined)
+        ?.error;
+    if (
+        typeof tiktokErrorCode === "string" &&
+        REAUTH_ERROR_CODES.has(tiktokErrorCode)
+    ) {
+        throw await flagAccountNeedsReauth(account.id, "TikTok");
+    }
 
     const tokenData = z
         .object({
@@ -925,7 +1006,9 @@ export async function processSocialPublish(
         };
     } catch (error) {
         const maxAttempts = job.opts.attempts ?? 1;
-        const attemptsExhausted = job.attemptsMade + 1 >= maxAttempts;
+        const attemptsExhausted =
+            error instanceof UnrecoverableError ||
+            job.attemptsMade + 1 >= maxAttempts;
         const errorMessage = formatPublishError(error);
 
         console.error(

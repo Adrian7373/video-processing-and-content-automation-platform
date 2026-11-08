@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getOrCreateActor } from "@/lib/auth";
@@ -6,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 const OAUTH_STATE_COOKIE = "vr_oauth_state";
 const OAUTH_RETURN_COOKIE = "vr_oauth_return_to";
+const OAUTH_PKCE_COOKIE = "vr_oauth_pkce";
 
 function getBaseUrl(request: Request): string {
     if (process.env.NEXT_PUBLIC_APP_URL) {
@@ -67,6 +69,22 @@ export async function GET(
         );
         authUrl.searchParams.set("redirect_uri", redirectUri);
         authUrl.searchParams.set("state", state);
+
+        // TikTok requires PKCE. Its code_challenge is the HEX-encoded SHA-256 of the verifier
+        // (not base64url like RFC 7636).
+        const codeVerifier = randomBytes(48).toString("base64url");
+        const codeChallenge = createHash("sha256")
+            .update(codeVerifier)
+            .digest("hex");
+        cookieStore.set(OAUTH_PKCE_COOKIE, codeVerifier, {
+            httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+            path: "/",
+            maxAge: 60 * 10,
+        });
+        authUrl.searchParams.set("code_challenge", codeChallenge);
+        authUrl.searchParams.set("code_challenge_method", "S256");
 
         return NextResponse.redirect(authUrl.toString());
     }

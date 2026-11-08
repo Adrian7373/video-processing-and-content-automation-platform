@@ -951,7 +951,7 @@ export async function processVideo(
                     start_time: 0,
                     end_time: sourceDuration,
                     key_points: ["Full video processed for captions"],
-                    social_caption: `Here is the full captioned video for ${videoTitle} #captions`,
+                    social_caption: `${videoTitle}\n\n#shorts #captions`,
                 },
             ];
         } else {

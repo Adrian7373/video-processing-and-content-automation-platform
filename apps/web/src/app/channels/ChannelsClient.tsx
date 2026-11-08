@@ -260,7 +260,7 @@ export default function ChannelsClient() {
                                             connectedForPlatform.map((acc) => (
                                                 <div
                                                     key={acc.id}
-                                                    className="flex items-center justify-between gap-3 rounded-xl border border-line bg-page/90 px-3.5 py-2.5 text-xs"
+                                                    className={`flex items-center justify-between gap-3 rounded-xl border bg-page/90 px-3.5 py-2.5 text-xs ${acc.needsReauth ? "border-danger/40" : "border-line"}`}
                                                 >
                                                     <div className="min-w-0">
                                                         <p className="truncate font-semibold text-ink">
@@ -272,7 +272,20 @@ export default function ChannelsClient() {
                                                                 acc.platformAccountId
                                                             }
                                                         </p>
+                                                        {acc.needsReauth && (
+                                                            <p role="alert" className="mt-1 text-xs text-danger">
+                                                                {acc.reauthReason ?? "Sign-in expired. Reconnect to keep publishing."}
+                                                            </p>
+                                                        )}
                                                     </div>
+                                                    {acc.needsReauth && (
+                                                        <a
+                                                            href={`/api/integrations/${item.slug}/connect?returnTo=/channels`}
+                                                            className="shrink-0 rounded-lg border border-line-strong bg-raised px-2.5 py-1 text-xs font-semibold text-ink transition hover:bg-surface"
+                                                        >
+                                                            Reconnect
+                                                        </a>
+                                                    )}
 
                                                     <button
                                                         type="button"

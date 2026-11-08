@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 const OAUTH_STATE_COOKIE = "vr_oauth_state";
 const OAUTH_RETURN_COOKIE = "vr_oauth_return_to";
+const OAUTH_PKCE_COOKIE = "vr_oauth_pkce";
 
 function getBaseUrl(request: Request): string {
     if (process.env.NEXT_PUBLIC_APP_URL) {
@@ -31,7 +32,10 @@ export async function GET(
     const storedState = cookieStore.get(OAUTH_STATE_COOKIE)?.value;
     const returnTo = cookieStore.get(OAUTH_RETURN_COOKIE)?.value || "/channels";
 
+    const codeVerifier = cookieStore.get(OAUTH_PKCE_COOKIE)?.value;
+
     cookieStore.delete(OAUTH_STATE_COOKIE);
+    cookieStore.delete(OAUTH_PKCE_COOKIE);
     cookieStore.delete(OAUTH_RETURN_COOKIE);
 
     const code = requestUrl.searchParams.get("code");
@@ -66,6 +70,12 @@ export async function GET(
                 throw new Error("Missing TikTok client credentials on server.");
             }
 
+            if (!codeVerifier) {
+                throw new Error(
+                    "TikTok sign-in session expired. Please try connecting again.",
+                );
+            }
+
             const redirectUri = `${baseUrl}/api/integrations/tiktok/callback`;
 
             // 1. Exchange code for Access Token
@@ -82,6 +92,7 @@ export async function GET(
                         code,
                         grant_type: "authorization_code",
                         redirect_uri: redirectUri,
+                        code_verifier: codeVerifier,
                     }),
                 },
             );
@@ -140,6 +151,8 @@ export async function GET(
                     accessToken: access_token,
                     refreshToken: refresh_token ?? null,
                     tokenExpiresAt: expiresAt,
+                    needsReauth: false,
+                    reauthReason: null,
                 },
                 create: {
                     userId: actor.userId,
@@ -230,6 +243,8 @@ export async function GET(
                         ? { refreshToken: tokenData.refresh_token }
                         : {}),
                     tokenExpiresAt: expiresAt,
+                    needsReauth: false,
+                    reauthReason: null,
                 },
                 create: {
                     userId: actor.userId,
