@@ -5,6 +5,7 @@ import {
     SocialPlatform,
 } from "../../../../../../../../packages/database/index";
 import { getOrCreateActor } from "@/lib/auth";
+import { retryReauthFailedPosts } from "@/lib/scheduleRetry";
 
 export const dynamic = "force-dynamic";
 
@@ -138,7 +139,7 @@ export async function GET(
                 ? new Date(Date.now() + Number(expires_in) * 1000)
                 : null;
 
-            await prisma.socialAccount.upsert({
+            const connectedAccount = await prisma.socialAccount.upsert({
                 where: {
                     userId_platform_platformAccountId: {
                         userId: actor.userId,
@@ -164,6 +165,7 @@ export async function GET(
                     tokenExpiresAt: expiresAt,
                 },
             });
+            await retryReauthFailedPosts(connectedAccount.id);
 
             const destination = returnTo.startsWith("/") ? returnTo : "/channels";
             const separator = destination.includes("?") ? "&" : "?";
@@ -228,7 +230,7 @@ export async function GET(
                 ? new Date(Date.now() + Number(tokenData.expires_in) * 1000)
                 : null;
 
-            await prisma.socialAccount.upsert({
+            const connectedAccount = await prisma.socialAccount.upsert({
                 where: {
                     userId_platform_platformAccountId: {
                         userId: actor.userId,
@@ -256,6 +258,7 @@ export async function GET(
                     tokenExpiresAt: expiresAt,
                 },
             });
+            await retryReauthFailedPosts(connectedAccount.id);
 
             const destination = returnTo.startsWith("/") ? returnTo : "/channels";
             const separator = destination.includes("?") ? "&" : "?";

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import AuthGateModal from "../../components/AuthGateModal";
 import PlatformIcon, { PLATFORM_LABEL, type SocialPlatformType } from "../../components/PlatformIcon";
+import PostDetailsModal, { type PostDetails } from "../../components/PostDetailsModal";
 import { PLATFORM_COLOR, STATUS_BADGE, badgeBase, ui } from "@/lib/ui";
 
 export type { SocialPlatformType };
@@ -22,6 +23,8 @@ type ScheduledPost = {
     scheduledFor: string;
     caption: string;
     publishedUrl?: string | null;
+    errorMessage?: string | null;
+    failureCode?: string | null;
     socialAccount: {
         id?: string;
         platform: SocialPlatformType;
@@ -738,21 +741,67 @@ function CopyMini({ text }: { text: string }) {
 function SchedulePanel({ segment, onSaved, isAnonymous, onNeedAuth }: { segment: Segment; onSaved: () => void; isAnonymous: boolean; onNeedAuth: () => void }) {
     const scheduler = useScheduler(segment, onSaved);
     const posts = activePosts(segment).sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
-    const [removeError, setRemoveError] = useState<string | null>(null);
+    const [openPostId, setOpenPostId] = useState<string | null>(null);
+    const [retrying, setRetrying] = useState(false);
+    const [modalError, setModalError] = useState<string | null>(null);
+    const openPost = posts.find((p) => p.id === openPostId) ?? null;
 
-    const handleCancelPost = async (postId: string) => {
-        setRemoveError(null);
+    const closeModal = () => {
+        setOpenPostId(null);
+        setModalError(null);
+    };
+
+    const handleModalRemove = async (post: PostDetails) => {
+        setModalError(null);
         try {
-            const response = await fetch(`/api/schedule/${postId}`, { method: "DELETE" });
+            const response = await fetch(`/api/schedule/${post.id}`, { method: "DELETE" });
             if (!response.ok) throw new Error();
+            closeModal();
             onSaved();
         } catch {
-            setRemoveError("The post could not be removed. Try again.");
+            setModalError("The post could not be removed. Try again.");
+        }
+    };
+
+    const handleModalRetry = async (post: PostDetails) => {
+        setRetrying(true);
+        setModalError(null);
+        try {
+            const response = await fetch(`/api/schedule/${post.id}/retry`, { method: "POST" });
+            const data = (await response.json().catch(() => ({}))) as { error?: string };
+            if (!response.ok) throw new Error(data.error ?? "The post could not be retried. Try again.");
+            closeModal();
+            onSaved();
+        } catch (error) {
+            setModalError(error instanceof Error ? error.message : "The post could not be retried. Try again.");
+        } finally {
+            setRetrying(false);
         }
     };
 
     return (
         <div className="space-y-6">
+            {openPost && (
+                <PostDetailsModal
+                    post={{
+                        id: openPost.id,
+                        segmentTitle: segment.title,
+                        platform: openPost.socialAccount.platform,
+                        accountName: openPost.socialAccount.accountName,
+                        caption: openPost.caption,
+                        scheduledFor: openPost.scheduledFor,
+                        status: openPost.status,
+                        publishedUrl: openPost.publishedUrl,
+                        errorMessage: openPost.errorMessage,
+                        failureCode: openPost.failureCode,
+                    }}
+                    busy={retrying}
+                    error={modalError}
+                    onClose={closeModal}
+                    onRemove={(post) => void handleModalRemove(post)}
+                    onRetry={(post) => void handleModalRetry(post)}
+                />
+            )}
             <div>
                 <p className="text-[13px] font-medium text-muted">Scheduled posts</p>
                 {posts.length === 0 ? (
@@ -760,20 +809,21 @@ function SchedulePanel({ segment, onSaved, isAnonymous, onNeedAuth }: { segment:
                 ) : (
                     <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
                         {posts.map((post) => (
-                            <li key={post.id} className="flex items-center gap-3 px-3 py-2.5">
+                            <li key={post.id} className="relative flex items-center gap-3 px-3 py-2.5 transition hover:bg-surface">
                                 <PlatformIcon platform={post.socialAccount.platform} className={`h-4 w-4 shrink-0 ${PLATFORM_COLOR[post.socialAccount.platform]}`} />
-                                <div className="min-w-0 flex-1">
-                                    <p className="truncate text-sm font-medium">{post.socialAccount.accountName || PLATFORM_LABEL[post.socialAccount.platform].label}</p>
-                                    <p className="text-[13px] tabular-nums text-muted">{format(parseISO(post.scheduledFor), "EEE d MMM, HH:mm")}</p>
-                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setOpenPostId(post.id)}
+                                    aria-label={`View details for the ${format(parseISO(post.scheduledFor), "EEE d MMM, HH:mm")} post to ${post.socialAccount.accountName}`}
+                                    className={`min-w-0 flex-1 rounded text-left before:absolute before:inset-0 ${ui.focusRing}`}
+                                >
+                                    <span className="block truncate text-sm font-medium">{post.socialAccount.accountName || PLATFORM_LABEL[post.socialAccount.platform].label}</span>
+                                    <span className="block text-[13px] tabular-nums text-muted">{format(parseISO(post.scheduledFor), "EEE d MMM, HH:mm")}</span>
+                                </button>
                                 {post.status === "PUBLISHED" && post.publishedUrl ? (
-                                    <a href={post.publishedUrl} target="_blank" rel="noopener noreferrer" className="text-[13px] font-medium text-link underline-offset-2 hover:underline">
+                                    <a href={post.publishedUrl} target="_blank" rel="noopener noreferrer" className="relative text-[13px] font-medium text-link underline-offset-2 hover:underline">
                                         View post
                                     </a>
-                                ) : post.status === "SCHEDULED" ? (
-                                    <button type="button" onClick={() => void handleCancelPost(post.id)} className="text-[13px] font-medium text-danger underline-offset-2 hover:underline">
-                                        Remove
-                                    </button>
                                 ) : (
                                     <span className={`${badgeBase} ${STATUS_BADGE[post.status].className}`}>{STATUS_BADGE[post.status].label}</span>
                                 )}
@@ -781,7 +831,6 @@ function SchedulePanel({ segment, onSaved, isAnonymous, onNeedAuth }: { segment:
                         ))}
                     </ul>
                 )}
-                {removeError && <p role="alert" className="mt-2 text-sm font-medium text-danger">{removeError}</p>}
             </div>
 
             {isAnonymous ? (

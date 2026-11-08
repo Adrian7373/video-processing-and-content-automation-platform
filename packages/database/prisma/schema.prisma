@@ -207,6 +207,7 @@ model ScheduledPost {
   status          PublishStatus @default(SCHEDULED)
   publishedUrl    String?
   errorMessage    String?       @db.Text
+  failureCode     String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   publishedAt     DateTime?

@@ -168,6 +168,13 @@ function isRevokedGrantError(error: unknown): boolean {
     );
 }
 
+export class ReauthRequiredError extends UnrecoverableError {
+    constructor(message: string) {
+        super(message);
+        this.name = "ReauthRequiredError";
+    }
+}
+
 /**
  * Flags the account so the Channels page asks the user to reconnect, and returns a
  * non-retryable error for BullMQ.
@@ -175,7 +182,7 @@ function isRevokedGrantError(error: unknown): boolean {
 async function flagAccountNeedsReauth(
     accountId: string,
     platformName: string,
-): Promise<UnrecoverableError> {
+): Promise<ReauthRequiredError> {
     const reason = `Your ${platformName} connection has expired or was revoked. Reconnect it in Social accounts to keep publishing.`;
     await prisma.socialAccount
         .update({
@@ -188,7 +195,7 @@ async function flagAccountNeedsReauth(
                 dbError,
             );
         });
-    return new UnrecoverableError(reason);
+    return new ReauthRequiredError(reason);
 }
 
 /**
@@ -954,6 +961,7 @@ export async function processSocialPublish(
             data: {
                 status: "PUBLISHING",
                 errorMessage: null,
+                failureCode: null,
             },
         });
 
@@ -1021,6 +1029,10 @@ export async function processSocialPublish(
                 data: {
                     status: attemptsExhausted ? "FAILED" : "SCHEDULED",
                     errorMessage,
+                    failureCode:
+                        error instanceof ReauthRequiredError
+                            ? "REAUTH_REQUIRED"
+                            : null,
                 },
             })
             .catch((dbError: unknown) => {

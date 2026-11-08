@@ -33,6 +33,7 @@ import {
 } from "date-fns";
 import AuthGateModal from "../components/AuthGateModal";
 import PlatformIcon, { PLATFORM_LABEL } from "../components/PlatformIcon";
+import PostDetailsModal from "../components/PostDetailsModal";
 import { PLATFORM_COLOR, STATUS_BADGE, badgeBase, ui } from "@/lib/ui";
 
 export type SocialPlatformType =
@@ -74,6 +75,8 @@ export interface CalendarScheduledPostItem {
     scheduledFor: string; // ISO string
     status: PublishStatusType;
     publishedUrl: string | null;
+    errorMessage?: string | null;
+    failureCode?: string | null;
 }
 
 export interface CalendarSocialAccountItem {
@@ -349,6 +352,8 @@ export default function CalendarClient({
 
     // Post details modal
     const [selectedPost, setSelectedPost] = useState<CalendarScheduledPostItem | null>(null);
+    const [retryingPost, setRetryingPost] = useState(false);
+    const [postError, setPostError] = useState<string | null>(null);
     const [showAuthModal, setShowAuthModal] = useState(isAnonymous);
 
     const accounts = initialAccounts;
@@ -540,6 +545,24 @@ export default function CalendarClient({
         } catch {
             setPosts((prev) => [...prev, post]);
             setNotice("The post could not be removed. Try again.");
+        }
+    };
+
+    const handleRetryScheduledPost = async (post: CalendarScheduledPostItem) => {
+        setRetryingPost(true);
+        setPostError(null);
+        try {
+            const response = await fetch(`/api/schedule/${post.id}/retry`, { method: "POST" });
+            const data = (await response.json().catch(() => ({}))) as { post?: CalendarScheduledPostItem; error?: string };
+            if (!response.ok || !data.post) throw new Error(data.error ?? "The post could not be retried. Try again.");
+            const retried = data.post;
+            setPosts((prev) => prev.map((p) => (p.id === retried.id ? retried : p)));
+            setSelectedPost(null);
+            setNotice("Retrying the post now.");
+        } catch (error) {
+            setPostError(error instanceof Error ? error.message : "The post could not be retried. Try again.");
+        } finally {
+            setRetryingPost(false);
         }
     };
 
@@ -918,55 +941,17 @@ export default function CalendarClient({
 
             {/* Post details */}
             {selectedPost && (
-                <div role="dialog" aria-modal="true" aria-labelledby="post-title" className={ui.modalBackdrop}>
-                    <div className={`${ui.modal} max-w-md p-6`}>
-                        <div className="flex items-start justify-between gap-4">
-                            <span className={`${badgeBase} ${STATUS_BADGE[selectedPost.status].className}`}>{STATUS_BADGE[selectedPost.status].label}</span>
-                            <button type="button" onClick={() => setSelectedPost(null)} aria-label="Close" className={`${ui.btnIcon} -mr-2 -mt-1`}>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="h-4 w-4"><path d="M18 6 6 18M6 6l12 12" /></svg>
-                            </button>
-                        </div>
-                        <h2 id="post-title" className={`${ui.h2} mt-3`}>{selectedPost.segmentTitle}</h2>
-
-                        <dl className="mt-4 divide-y divide-line rounded-lg border border-line text-sm">
-                            <div className="flex items-center justify-between gap-4 px-3 py-2.5">
-                                <dt className="text-muted">Account</dt>
-                                <dd className="inline-flex min-w-0 items-center gap-1.5 font-medium">
-                                    <PlatformIcon platform={selectedPost.platform} className={`h-4 w-4 shrink-0 ${PLATFORM_COLOR[selectedPost.platform]}`} />
-                                    <span className="truncate">{selectedPost.accountName}</span>
-                                </dd>
-                            </div>
-                            <div className="flex items-center justify-between gap-4 px-3 py-2.5">
-                                <dt className="text-muted">{selectedPost.status === "PUBLISHED" ? "Published" : "Posts on"}</dt>
-                                <dd className="font-medium tabular-nums">{format(parseISO(selectedPost.scheduledFor), "EEE d MMM yyyy, HH:mm")}</dd>
-                            </div>
-                        </dl>
-
-                        <p className="mt-4 text-[13px] font-medium">Caption</p>
-                        <p className="mt-1.5 max-h-36 overflow-y-auto whitespace-pre-wrap rounded-lg bg-surface p-3 text-sm leading-relaxed">
-                            {selectedPost.caption || "No caption"}
-                        </p>
-
-                        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
-                            {selectedPost.status !== "PUBLISHED" ? (
-                                <button type="button" onClick={() => void handleCancelScheduledPost(selectedPost)} className={ui.btnDanger}>
-                                    Remove from schedule
-                                </button>
-                            ) : (
-                                <span />
-                            )}
-                            {selectedPost.status === "PUBLISHED" && selectedPost.publishedUrl ? (
-                                <a href={selectedPost.publishedUrl} target="_blank" rel="noopener noreferrer" className={ui.btnPrimarySm}>
-                                    View the post
-                                </a>
-                            ) : (
-                                <button type="button" onClick={() => setSelectedPost(null)} className={ui.btnSecondarySm}>
-                                    Done
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </div>
+                <PostDetailsModal
+                    post={selectedPost}
+                    busy={retryingPost}
+                    error={postError}
+                    onClose={() => {
+                        setSelectedPost(null);
+                        setPostError(null);
+                    }}
+                    onRemove={() => void handleCancelScheduledPost(selectedPost)}
+                    onRetry={() => void handleRetryScheduledPost(selectedPost)}
+                />
             )}
 
             {showAuthModal && (

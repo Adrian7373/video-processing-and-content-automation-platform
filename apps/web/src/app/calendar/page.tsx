@@ -124,6 +124,8 @@ export default async function CalendarPage() {
         scheduledFor: post.scheduledFor.toISOString(),
         status: post.status,
         publishedUrl: post.publishedUrl ?? null,
+        errorMessage: post.errorMessage ?? null,
+        failureCode: post.failureCode ?? null,
     }));
 
     const serializedAccounts: CalendarSocialAccountItem[] = socialAccounts.map((acc) => ({
