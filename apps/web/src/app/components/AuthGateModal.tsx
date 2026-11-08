@@ -2,6 +2,7 @@
 
 import React, { FormEvent, useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
+import { LEGAL, LEGAL_VERSION, TERMS_CONSENT_COOKIE } from "@/lib/legal";
 
 type AuthTab = "register" | "login";
 
@@ -20,6 +21,8 @@ export default function AuthGateModal({
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [agreedTerms, setAgreedTerms] = useState(false);
+    const [agreedPrivacy, setAgreedPrivacy] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
 
@@ -31,23 +34,38 @@ export default function AuthGateModal({
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [onClose]);
 
+    const consentGiven = agreedTerms && agreedPrivacy;
+    const consentMissing = "Please accept the Terms of Service and the Privacy Policy to create an account.";
+
     const handleGoogleSignIn = async () => {
-        setSubmitting(true);
         setFormError(null);
+        if (tab === "register") {
+            if (!consentGiven) {
+                setFormError(consentMissing);
+                return;
+            }
+            // Short-lived cookie so the server can record consent if this creates a new account.
+            document.cookie = `${TERMS_CONSENT_COOKIE}=${LEGAL_VERSION}; path=/; max-age=600; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`;
+        }
+        setSubmitting(true);
         await signIn("google", { callbackUrl: window.location.href });
     };
 
     const handleCredentialsSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        setSubmitting(true);
         setFormError(null);
+        if (tab === "register" && !consentGiven) {
+            setFormError(consentMissing);
+            return;
+        }
+        setSubmitting(true);
 
         try {
             if (tab === "register") {
                 const registerRes = await fetch("/api/auth/register", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name, email, password }),
+                    body: JSON.stringify({ name, email, password, acceptedTerms: consentGiven }),
                 });
 
                 if (!registerRes.ok) {
@@ -109,11 +127,44 @@ export default function AuthGateModal({
                     </p>
                 )}
 
+                <div className="mt-5 grid grid-cols-2 gap-0.5 rounded-lg border border-line bg-surface p-[3px]">
+                    <button type="button" onClick={() => { setTab("register"); setFormError(null); }} className={`h-9 rounded-md text-sm font-medium transition ${tab === "register" ? "bg-raised text-ink shadow-[0_0_0_1px_var(--sm-line-strong)]" : "text-muted hover:text-ink"}`}>Create account</button>
+                    <button type="button" onClick={() => { setTab("login"); setFormError(null); }} className={`h-9 rounded-md text-sm font-medium transition ${tab === "login" ? "bg-raised text-ink shadow-[0_0_0_1px_var(--sm-line-strong)]" : "text-muted hover:text-ink"}`}>Sign in</button>
+                </div>
+
+                {tab === "register" ? (
+                    <fieldset className="mt-4 space-y-3 rounded-lg border border-line bg-surface p-3.5">
+                        <legend className="sr-only">Agreements</legend>
+                        <label className="flex cursor-pointer items-start gap-3 text-sm leading-snug text-ink">
+                            <input type="checkbox" checked={agreedTerms} onChange={(e) => setAgreedTerms(e.target.checked)} className="mt-0.5 h-[18px] w-[18px] shrink-0 accent-[var(--sm-action)]" />
+                            <span>
+                                I am at least {LEGAL.minimumAge} years old and I agree to the{" "}
+                                <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-link underline underline-offset-2">Terms of Service</a>,{" "}
+                                <a href="/acceptable-use" target="_blank" rel="noopener noreferrer" className="font-medium text-link underline underline-offset-2">Acceptable Use Policy</a>, and{" "}
+                                <a href="/refunds" target="_blank" rel="noopener noreferrer" className="font-medium text-link underline underline-offset-2">Credits and Refund Policy</a>.
+                            </span>
+                        </label>
+                        <label className="flex cursor-pointer items-start gap-3 text-sm leading-snug text-ink">
+                            <input type="checkbox" checked={agreedPrivacy} onChange={(e) => setAgreedPrivacy(e.target.checked)} className="mt-0.5 h-[18px] w-[18px] shrink-0 accent-[var(--sm-action)]" />
+                            <span>
+                                I have read the{" "}
+                                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-link underline underline-offset-2">Privacy Policy</a>{" "}
+                                and consent to the collection and processing of my personal data as described there, in line with the Data Privacy Act of 2012.
+                            </span>
+                        </label>
+                    </fieldset>
+                ) : (
+                    <p className="mt-4 text-[13px] leading-snug text-muted">
+                        By signing in you agree to our <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-link underline underline-offset-2">Terms</a> and{" "}
+                        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-link underline underline-offset-2">Privacy Policy</a>.
+                    </p>
+                )}
+
                 <button
                     type="button"
                     disabled={submitting}
                     onClick={() => void handleGoogleSignIn()}
-                    className="mt-5 flex h-11 w-full items-center justify-center gap-2.5 rounded-lg border border-line-strong bg-raised px-4 text-sm font-medium text-ink transition hover:border-line-strong hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
+                    className="mt-4 flex h-11 w-full items-center justify-center gap-2.5 rounded-lg border border-line-strong bg-raised px-4 text-sm font-medium text-ink transition hover:border-line-strong hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
                 >
                     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
                         <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.8C6.2 7.2 8.9 5 12 5z" />
@@ -130,10 +181,6 @@ export default function AuthGateModal({
                     <span className="h-px flex-1 bg-line" />
                 </div>
 
-                <div className="mb-4 grid grid-cols-2 gap-0.5 rounded-lg border border-line bg-surface p-[3px]">
-                    <button type="button" onClick={() => { setTab("register"); setFormError(null); }} className={`h-9 rounded-md text-sm font-medium transition ${tab === "register" ? "bg-raised text-ink shadow-[0_0_0_1px_var(--sm-line-strong)]" : "text-muted hover:text-ink"}`}>Create account</button>
-                    <button type="button" onClick={() => { setTab("login"); setFormError(null); }} className={`h-9 rounded-md text-sm font-medium transition ${tab === "login" ? "bg-raised text-ink shadow-[0_0_0_1px_var(--sm-line-strong)]" : "text-muted hover:text-ink"}`}>Sign in</button>
-                </div>
 
                 <form onSubmit={handleCredentialsSubmit} className="space-y-3.5">
                     {formError && <p role="alert" className="rounded-xl border border-danger/30 bg-danger/10 p-2.5 text-xs font-medium text-danger">{formError}</p>}

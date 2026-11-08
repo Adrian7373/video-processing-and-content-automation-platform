@@ -67,6 +67,8 @@ model User {
   emailVerified DateTime?
   image         String?
   passwordHash  String?   @db.Text
+  termsAcceptedAt DateTime?
+  termsVersion    String?
   isAnonymous   Boolean   @default(false)
   credits       Int       @default(10)
   createdAt     DateTime  @default(now())

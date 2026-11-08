@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { z } from "zod";
+import { LEGAL_VERSION } from "@/lib/legal";
 import { prisma, CreditReason } from "../../../../../../../packages/database/index";
 import {
     GUEST_COOKIE_NAME,
@@ -13,6 +14,9 @@ const registerSchema = z.object({
     name: z.string().trim().min(2, "Name must be at least 2 characters.").max(80),
     email: z.string().trim().email("Please enter a valid email address."),
     password: z.string().min(6, "Password must be at least 6 characters."),
+    acceptedTerms: z.literal(true, {
+        error: "You must accept the Terms of Service and Privacy Policy to create an account.",
+    }),
 });
 
 export async function POST(request: Request) {
@@ -61,6 +65,8 @@ export async function POST(request: Request) {
                 passwordHash,
                 isAnonymous: false,
                 credits: INITIAL_AUTH_CREDITS,
+                termsAcceptedAt: new Date(),
+                termsVersion: LEGAL_VERSION,
             },
             select: {
                 id: true,

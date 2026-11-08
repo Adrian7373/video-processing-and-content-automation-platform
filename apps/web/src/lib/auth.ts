@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { prisma, CreditReason } from "../../../../packages/database/index";
+import { TERMS_CONSENT_COOKIE } from "@/lib/legal";
 
 export const GUEST_COOKIE_NAME = "vr_guest_user_id";
 export const INITIAL_TRIAL_CREDITS = 3;
@@ -269,6 +270,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     events: {
         async createUser({ user }) {
             if (!user.id) return;
+            // Google sign-up: the modal stores the accepted terms version in a short-lived cookie.
+            try {
+                const cookieStore = await cookies();
+                const accepted = cookieStore.get(TERMS_CONSENT_COOKIE)?.value;
+                if (accepted) {
+                    await prisma.user.update({
+                        where: { id: user.id },
+                        data: { termsAcceptedAt: new Date(), termsVersion: accepted.slice(0, 32) },
+                    });
+                    cookieStore.delete(TERMS_CONSENT_COOKIE);
+                }
+            } catch {
+                // Consent cookie unavailable outside a request context; the user can accept later.
+            }
             await prisma.creditTransaction.create({
                 data: {
                     userId: user.id,
